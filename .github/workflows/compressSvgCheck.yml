@@ -26,6 +26,6 @@ jobs:
         with:
           IS_DESKTOP_BUILD: true
 
-      - name: Check if any SVG files were compressed
+      - name: Check if SVG files are compressed
         id: compress
         uses: ./.github/actions/javascript/compressSvgCheck

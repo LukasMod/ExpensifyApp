@@ -38,7 +38,7 @@ jobs:
       - name: Compress SVG files
         id: compress
         if: steps.check_existing.outputs.existing_pr != 'true'
-        uses: ./.github/actions/javascript/compressSvg
+        uses: ./.github/actions/javascript/oldCompressSvg
 
       - name: Create Pull Request
         if: steps.compress.outputs.has_changes == 'true' && steps.check_existing.outputs.existing_pr != 'true'
