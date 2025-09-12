@@ -264,7 +264,7 @@ function logSummaryCheck(summary: CompressionSummary) {
         console.log('\n📋 Individual file results:');
         results.forEach((result) => {
             const {filePath, savings} = result;
-            console.log(`${filePath}: ${savings > 0 ? 'Compressed ✅' : 'Not compressed ❌'}`);
+            console.log(`${filePath}: ${savings > 0 ? 'Not properly compressed ❌' : 'Compressed ✅'}`);
         });
     } else {
         console.log('\n✅ All files already compressed');
@@ -272,11 +272,11 @@ function logSummaryCheck(summary: CompressionSummary) {
 
     console.log('\nCOMPRESSION CHECK SUMMARY');
     console.log(`Files processed: ${totalFiles}`);
-    console.log(`Files compressed: ${totalFilesCompressed}`);
+    console.log(`Files not properly compressed: ${totalFilesCompressed}`);
 }
 
 function processFiles(svgFiles: string[], isSavingFile: boolean): CompressionSummary {
-    console.log(`🚀 Starting compression... ${svgFiles.length} SVG file(s)`);
+    console.log(`🚀 Starting compression (${!isSavingFile ? 'check' : ''})... ${svgFiles.length} SVG file(s)`);
     const results: CompressionResult[] = [];
 
     for (const file of svgFiles) {
