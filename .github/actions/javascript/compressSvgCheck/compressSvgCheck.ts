@@ -2,13 +2,13 @@ import * as core from '@actions/core';
 import type {CompressionSummary} from '@scripts/compressSvg';
 import compressSvg from '@scripts/compressSvg';
 
-function run() {
+async function run() {
     try {
         const token = core.getInput('GITHUB_TOKEN', {required: true});
         if (!token) {
             throw new Error('GITHUB_TOKEN is required');
         }
-        const summary: CompressionSummary = compressSvg('github', {token});
+        const summary: CompressionSummary = await compressSvg('github', {token});
 
         if (summary.totalSavings > 0) {
             // Files are not compressed. Run`npm run compress-svg` locally and check results on all platforms.

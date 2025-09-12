@@ -1058,6 +1058,50 @@ exports.Context = Context;
 
 /***/ }),
 
+/***/ 5438:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getOctokit = exports.context = void 0;
+const Context = __importStar(__nccwpck_require__(4087));
+const utils_1 = __nccwpck_require__(3030);
+exports.context = new Context.Context();
+/**
+ * Returns a hydrated octokit ready to use for GitHub Actions
+ *
+ * @param     token    the repo PAT or GITHUB_TOKEN
+ * @param     options  other options to set
+ */
+function getOctokit(token, options, ...additionalPlugins) {
+    const GitHubWithPlugins = utils_1.GitHub.plugin(...additionalPlugins);
+    return new GitHubWithPlugins(utils_1.getOctokitOptions(token, options));
+}
+exports.getOctokit = getOctokit;
+//# sourceMappingURL=github.js.map
+
+/***/ }),
+
 /***/ 7914:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -1240,9 +1284,9 @@ exports.createTokenAuth = createTokenAuth;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 
-var universalUserAgent = __nccwpck_require__(1429);
+var universalUserAgent = __nccwpck_require__(5030);
 var beforeAfterHook = __nccwpck_require__(3682);
-var request = __nccwpck_require__(4443);
+var request = __nccwpck_require__(9353);
 var graphql = __nccwpck_require__(6422);
 var authToken = __nccwpck_require__(673);
 
@@ -1425,7 +1469,7 @@ exports.Octokit = Octokit;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 
 var isPlainObject = __nccwpck_require__(3287);
-var universalUserAgent = __nccwpck_require__(1429);
+var universalUserAgent = __nccwpck_require__(5030);
 
 function lowercaseKeys(object) {
   if (!object) {
@@ -1822,8 +1866,8 @@ exports.endpoint = endpoint;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 
-var request = __nccwpck_require__(4443);
-var universalUserAgent = __nccwpck_require__(1429);
+var request = __nccwpck_require__(9353);
+var universalUserAgent = __nccwpck_require__(5030);
 
 const VERSION = "4.8.0";
 
@@ -2235,7 +2279,7 @@ exports.RequestError = RequestError;
 
 /***/ }),
 
-/***/ 4443:
+/***/ 9353:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -2246,7 +2290,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
 var endpoint = __nccwpck_require__(8713);
-var universalUserAgent = __nccwpck_require__(1429);
+var universalUserAgent = __nccwpck_require__(5030);
 var isPlainObject = __nccwpck_require__(3287);
 var nodeFetch = _interopDefault(__nccwpck_require__(467));
 var requestError = __nccwpck_require__(7471);
@@ -6769,7 +6813,7 @@ exports.attributeRules = {
 
 /***/ }),
 
-/***/ 5030:
+/***/ 1025:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -7117,7 +7161,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.aliases = exports.pseudos = exports.filters = exports.is = exports.selectOne = exports.selectAll = exports.prepareContext = exports._compileToken = exports._compileUnsafe = exports.compile = void 0;
 var DomUtils = __importStar(__nccwpck_require__(1440));
 var boolbase_1 = __importDefault(__nccwpck_require__(4159));
-var compile_js_1 = __nccwpck_require__(5030);
+var compile_js_1 = __nccwpck_require__(1025);
 var subselects_js_1 = __nccwpck_require__(5813);
 var defaultEquals = function (a, b) { return a === b; };
 var defaultOptions = {
@@ -17344,7 +17388,7 @@ exports.debug = debug; // for test
 
 /***/ }),
 
-/***/ 1429:
+/***/ 5030:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
@@ -20061,13 +20105,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(2186));
 const compressSvg_1 = __importDefault(__nccwpck_require__(6482));
-function run() {
+async function run() {
     try {
         const token = core.getInput('GITHUB_TOKEN', { required: true });
         if (!token) {
             throw new Error('GITHUB_TOKEN is required');
         }
-        const summary = (0, compressSvg_1.default)('github', { token });
+        const summary = await (0, compressSvg_1.default)('github', { token });
         if (summary.totalSavings > 0) {
             // Files are not compressed. Run`npm run compress-svg` locally and check results on all platforms.
             throw new Error(`SVG ${summary.totalFilesCompressed} file(s) were not compressed. Run 'npm run compress-svg' locally and check results on all platforms.`);
@@ -20854,6 +20898,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.generateMarkdownSummary = generateMarkdownSummary;
 exports.getFilesFromGithub = getFilesFromGithub;
+const github = __importStar(__nccwpck_require__(5438));
 const fs = __importStar(__nccwpck_require__(7147));
 const path = __importStar(__nccwpck_require__(1017));
 const svgo_1 = __nccwpck_require__(2456);
@@ -21106,49 +21151,44 @@ function generateMarkdownSummary(summary) {
     markdown.push('');
     return markdown.join('\n');
 }
-function getFilesFromGithub() {
+async function getFilesFromGithub() {
     try {
         // fetch all svg files that were changed/added in this PR
-        // Get changed files from the current PR using GitHub CLI
-        const pullRequestNumber = Number(process.env.GITHUB_PR_NUMBER);
-        const changedFiles = GithubUtils_1.default.getPullRequestSVGFiles(pullRequestNumber)
-            .then((files) => {
-            const svgFiles = files
-                .filter((file) => path.extname(file.toLowerCase()) === '.svg')
-                .map((file) => path.resolve(file))
-                .filter((file) => fs.existsSync(file));
-            console.log(`Found ${svgFiles.length} changed SVG files in PR`);
-            return svgFiles;
-        })
-            .catch((error) => {
-            console.error('❌ Error getting files from GitHub:', error);
+        const pullRequestNumber = github.context.payload.pull_request?.number;
+        if (!pullRequestNumber) {
+            console.log('No pull request number found');
             return [];
-        });
-        console.log('TEST !!!!!! changedFiles', changedFiles);
-        // const changedFilesOutput = execSync('gh pr diff --name-only', {
-        //     encoding: 'utf8',
-        //     cwd: process.cwd(),
-        // })
-        //     .toString()
-        //     .trim();
-        // if (!changedFilesOutput) {
-        //     console.log('No changed files found in PR');
-        //     return [];
-        // }
-        // Filter only SVG files and resolve their paths
-        // const changedFiles = changedFilesOutput.split('\n');
-        // const svgFiles = changedFiles
-        //     .filter((file) => path.extname(file.toLowerCase()) === '.svg')
-        //     .map((file) => path.resolve(file))
-        //     .filter((file) => fs.existsSync(file));
-        // console.log(`Found ${svgFiles.length} changed SVG files in PR`);
-        // return svgFiles;
-        return [];
+        }
+        const changedFiles = await GithubUtils_1.default.getPullRequestSVGFiles(pullRequestNumber);
+        const svgFiles = changedFiles
+            .filter((file) => path.extname(file.toLowerCase()) === '.svg')
+            .map((file) => path.resolve(file))
+            .filter((file) => fs.existsSync(file));
+        console.log(`Found ${svgFiles.length} changed SVG files in PR`);
+        return svgFiles;
     }
     catch (error) {
         console.error('❌ Error getting files from GitHub:', error);
         return [];
     }
+    // const changedFilesOutput = execSync('gh pr diff --name-only', {
+    //     encoding: 'utf8',
+    //     cwd: process.cwd(),
+    // })
+    //     .toString()
+    //     .trim();
+    // if (!changedFilesOutput) {
+    //     console.log('No changed files found in PR');
+    //     return [];
+    // }
+    // Filter only SVG files and resolve their paths
+    // const changedFiles = changedFilesOutput.split('\n');
+    // const svgFiles = changedFiles
+    //     .filter((file) => path.extname(file.toLowerCase()) === '.svg')
+    //     .map((file) => path.resolve(file))
+    //     .filter((file) => fs.existsSync(file));
+    // console.log(`Found ${svgFiles.length} changed SVG files in PR`);
+    // return svgFiles;
 }
 function logHelp() {
     console.log('');
@@ -21165,7 +21205,7 @@ function logHelp() {
     console.log('  --files       Compress specified SVG files');
     console.log('');
 }
-function run(mode, options) {
+async function run(mode, options) {
     console.log('SVG Compression Tool');
     console.log('🔍 Searching for SVG files...');
     switch (mode) {
@@ -21190,7 +21230,7 @@ function run(mode, options) {
             return processFiles(validatedFiles, true);
         }
         case 'github': {
-            const changedSvgFiles = getFilesFromGithub();
+            const changedSvgFiles = await getFilesFromGithub();
             if (!changedSvgFiles.length) {
                 console.log('❌ No changed SVG files found. Skipping compression.');
             }
@@ -30307,7 +30347,7 @@ module.exports = importAtrule;
 
 const fontFace = __nccwpck_require__(4101);
 const _import = __nccwpck_require__(2851);
-const media = __nccwpck_require__(9353);
+const media = __nccwpck_require__(8724);
 const page = __nccwpck_require__(6051);
 const supports = __nccwpck_require__(2514);
 
@@ -30324,7 +30364,7 @@ module.exports = atrule;
 
 /***/ }),
 
-/***/ 9353:
+/***/ 8724:
 /***/ ((module) => {
 
 "use strict";
