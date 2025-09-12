@@ -19,7 +19,7 @@ const CONST = {
         CP_STAGING: 'CP Staging',
     },
     STATE: {
-        OPEN: 'open', // test
+        OPEN: 'open', // test //test
     },
     COMMENT: {
         TYPE_BOT: 'Bot',
