@@ -1,9 +1,9 @@
 #!/usr/bin/env ts-node
-import {execSync} from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {PluginConfig} from 'svgo';
 import {optimize} from 'svgo';
+import GithubUtils from '@github/libs/GithubUtils';
 
 type CompressionResult = {
     filePath: string;
@@ -334,27 +334,45 @@ function getFilesFromGithub(): string[] {
         // fetch all svg files that were changed/added in this PR
 
         // Get changed files from the current PR using GitHub CLI
-        const changedFilesOutput = execSync('gh pr diff --name-only', {
-            encoding: 'utf8',
-            cwd: process.cwd(),
-        })
-            .toString()
-            .trim();
+        const pullRequestNumber = Number(process.env.GITHUB_PR_NUMBER);
+        const changedFiles = GithubUtils.getPullRequestSVGFiles(pullRequestNumber)
+            .then((files) => {
+                const svgFiles = files
+                    .filter((file) => path.extname(file.toLowerCase()) === '.svg')
+                    .map((file) => path.resolve(file))
+                    .filter((file) => fs.existsSync(file));
 
-        if (!changedFilesOutput) {
-            console.log('No changed files found in PR');
-            return [];
-        }
+                console.log(`Found ${svgFiles.length} changed SVG files in PR`);
+                return svgFiles;
+            })
+            .catch((error) => {
+                console.error('❌ Error getting files from GitHub:', error);
+                return [];
+            });
+
+        console.log('TEST !!!!!! changedFiles', changedFiles);
+        // const changedFilesOutput = execSync('gh pr diff --name-only', {
+        //     encoding: 'utf8',
+        //     cwd: process.cwd(),
+        // })
+        //     .toString()
+        //     .trim();
+
+        // if (!changedFilesOutput) {
+        //     console.log('No changed files found in PR');
+        //     return [];
+        // }
 
         // Filter only SVG files and resolve their paths
-        const changedFiles = changedFilesOutput.split('\n');
-        const svgFiles = changedFiles
-            .filter((file) => path.extname(file.toLowerCase()) === '.svg')
-            .map((file) => path.resolve(file))
-            .filter((file) => fs.existsSync(file));
+        // const changedFiles = changedFilesOutput.split('\n');
+        // const svgFiles = changedFiles
+        //     .filter((file) => path.extname(file.toLowerCase()) === '.svg')
+        //     .map((file) => path.resolve(file))
+        //     .filter((file) => fs.existsSync(file));
 
-        console.log(`Found ${svgFiles.length} changed SVG files in PR`);
-        return svgFiles;
+        // console.log(`Found ${svgFiles.length} changed SVG files in PR`);
+        // return svgFiles;
+        return [];
     } catch (error) {
         console.error('❌ Error getting files from GitHub:', error);
         return [];
@@ -377,7 +395,7 @@ function logHelp() {
     console.log('');
 }
 
-function run(mode: 'directory' | 'files' | 'github' | 'githubCheck', options?: {targetDir?: string; filePaths?: string[]}): CompressionSummary {
+function run(mode: 'directory' | 'files' | 'github' | 'githubCheck', options?: {targetDir?: string; filePaths?: string[]; token?: string}): CompressionSummary {
     console.log('SVG Compression Tool');
     console.log('🔍 Searching for SVG files...');
     switch (mode) {

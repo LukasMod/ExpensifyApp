@@ -4,7 +4,11 @@ import compressSvg from '@scripts/compressSvg';
 
 function run() {
     try {
-        const summary: CompressionSummary = compressSvg('github');
+        const token = core.getInput('GITHUB_TOKEN', {required: true});
+        if (!token) {
+            throw new Error('GITHUB_TOKEN is required');
+        }
+        const summary: CompressionSummary = compressSvg('github', {token});
 
         if (summary.totalSavings > 0) {
             // Files are not compressed. Run`npm run compress-svg` locally and check results on all platforms.
