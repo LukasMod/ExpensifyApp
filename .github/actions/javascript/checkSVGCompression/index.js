@@ -21159,7 +21159,6 @@ function logHelp() {
     console.log('');
 }
 async function run(mode, options) {
-    console.log('SVG Compression Tool');
     console.log('🔍 Searching for SVG files...');
     switch (mode) {
         case 'directory': {
@@ -21180,7 +21179,6 @@ async function run(mode, options) {
             if (!svgFiles.length) {
                 console.log('❌ No valid SVG files provided.');
             }
-            console.log(`🚀 Starting compression ${svgFiles.length} SVG file(s)`);
             return compressSvgFiles(svgFiles);
         }
         case 'pullRequest': {
@@ -21188,7 +21186,6 @@ async function run(mode, options) {
             if (!svgFiles.length) {
                 console.log('❌ No changed SVG files found. Skipping compression.');
             }
-            console.log(`🚀 Checking if ${svgFiles.length} SVG file(s) are compressed...`);
             return checkCompressedSvgFiles(svgFiles);
         }
         default:
