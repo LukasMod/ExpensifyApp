@@ -275,65 +275,33 @@ function logSummaryCheck(summary: CompressionSummary) {
     console.log(`Files not properly compressed: ${totalFilesCompressed}`);
 }
 
-function processFiles(svgFiles: string[], isSavingFile: boolean): CompressionSummary {
-    console.log(`🚀 Starting compression (${!isSavingFile ? 'check' : ''})... ${svgFiles.length} SVG file(s)`);
+function processFiles(svgFiles: string[], isSavingFile: boolean): CompressionResult[] {
     const results: CompressionResult[] = [];
-
     for (const file of svgFiles) {
         const result = compressSvgFile(file, isSavingFile);
         results.push(result);
     }
+    return results;
+}
 
+function compressSvgFiles(svgFiles: string[]) {
+    console.log(`🚀 Starting compression ${svgFiles.length} SVG file(s)`);
+    const results = processFiles(svgFiles, true);
     const summary = createResultsSummary(results);
-
-    if (isSavingFile) {
-        logSummary(summary);
-    } else {
-        logSummaryCheck(summary);
-    }
+    logSummary(summary);
     return summary;
 }
 
-function generateMarkdownSummary(summary: CompressionSummary): string {
-    const {totalFiles, totalFilesCompressed, totalOriginalSize, totalCompressedSize, totalSavings, totalSavingsPercent, results} = summary;
-    const markdown: string[] = [];
-
-    markdown.push('## SVG Compression Summary\n');
-
-    markdown.push(`Files processed: ${totalFiles}`);
-    markdown.push(`Files compressed: ${totalFilesCompressed}`);
-    markdown.push(`Original size: ${formatBytes(totalOriginalSize)} KB`);
-    markdown.push(
-        getSummarySavingString({
-            prefix: 'Savings:',
-            originalSize: totalOriginalSize,
-            compressedSize: totalCompressedSize,
-            savings: totalSavings,
-            savingsPercent: totalSavingsPercent,
-        }),
-    );
-    markdown.push('');
-
-    if (results.length) {
-        markdown.push('| File | Original | Compressed | Savings |');
-        markdown.push('|------|----------|------------|---------|');
-
-        results.forEach((result) => {
-            const {originalSize, compressedSize, savings, savingsPercent, filePath} = result;
-            const savingsText = savings > 0 ? `${formatBytes(savings)} KB (${savingsPercent.toFixed(1)}%)` : ' --';
-            markdown.push(`| \`${filePath}\` | ${formatBytes(originalSize)} KB | ${formatBytes(compressedSize)} KB | ${savingsText} |`);
-        });
-    }
-
-    markdown.push('');
-
-    return markdown.join('\n');
+function checkCompressedSvgFiles(svgFiles: string[]) {
+    console.log(`🚀 Checking if ${svgFiles.length} SVG file(s) are compressed...`);
+    const results = processFiles(svgFiles, false);
+    const summary = createResultsSummary(results);
+    logSummaryCheck(summary);
+    return summary;
 }
 
-async function getFilesFromGithub(): Promise<string[]> {
+async function getChangedSvgFilesFromGithub(): Promise<string[]> {
     try {
-        // fetch all svg files that were changed/added in this PR
-
         const pullRequestNumber = github.context.payload.pull_request?.number;
 
         if (!pullRequestNumber) {
@@ -348,34 +316,12 @@ async function getFilesFromGithub(): Promise<string[]> {
             .map((file) => path.resolve(file))
             .filter((file) => fs.existsSync(file));
 
-        console.log(`Found ${svgFiles.length} changed SVG files in PR`);
+        console.log(`Found ${svgFiles.length} changed SVG file(s) in PR`);
         return svgFiles;
     } catch (error) {
         console.error('❌ Error getting files from GitHub:', error);
         return [];
     }
-
-    // const changedFilesOutput = execSync('gh pr diff --name-only', {
-    //     encoding: 'utf8',
-    //     cwd: process.cwd(),
-    // })
-    //     .toString()
-    //     .trim();
-
-    // if (!changedFilesOutput) {
-    //     console.log('No changed files found in PR');
-    //     return [];
-    // }
-
-    // Filter only SVG files and resolve their paths
-    // const changedFiles = changedFilesOutput.split('\n');
-    // const svgFiles = changedFiles
-    //     .filter((file) => path.extname(file.toLowerCase()) === '.svg')
-    //     .map((file) => path.resolve(file))
-    //     .filter((file) => fs.existsSync(file));
-
-    // console.log(`Found ${svgFiles.length} changed SVG files in PR`);
-    // return svgFiles;
 }
 
 function logHelp() {
@@ -394,7 +340,7 @@ function logHelp() {
     console.log('');
 }
 
-async function run(mode: 'directory' | 'files' | 'github' | 'githubCheck', options?: {targetDir?: string; filePaths?: string[]; token?: string}): Promise<CompressionSummary> {
+async function run(mode: 'directory' | 'files' | 'pullRequest', options?: {targetDir?: string; filePaths?: string[]; token?: string}): Promise<CompressionSummary> {
     console.log('SVG Compression Tool');
     console.log('🔍 Searching for SVG files...');
     switch (mode) {
@@ -408,31 +354,30 @@ async function run(mode: 'directory' | 'files' | 'github' | 'githubCheck', optio
             if (!svgFiles.length) {
                 console.log('❌ No SVG files found in the specified directory.');
             }
-
-            return processFiles(svgFiles, true);
+            return compressSvgFiles(svgFiles);
         }
 
         case 'files': {
             if (!options?.filePaths?.length) {
                 throw new Error('filePaths is required for files mode');
             }
-            const validatedFiles = validateSvgFiles(options.filePaths);
+            const svgFiles = validateSvgFiles(options.filePaths);
 
-            if (!validatedFiles.length) {
+            if (!svgFiles.length) {
                 console.log('❌ No valid SVG files provided.');
             }
-
-            return processFiles(validatedFiles, true);
+            console.log(`🚀 Starting compression ${svgFiles.length} SVG file(s)`);
+            return compressSvgFiles(svgFiles);
         }
 
-        case 'github': {
-            const changedSvgFiles = await getFilesFromGithub();
+        case 'pullRequest': {
+            const svgFiles = await getChangedSvgFilesFromGithub();
 
-            if (!changedSvgFiles.length) {
+            if (!svgFiles.length) {
                 console.log('❌ No changed SVG files found. Skipping compression.');
             }
-
-            return processFiles(changedSvgFiles, false);
+            console.log(`🚀 Checking if ${svgFiles.length} SVG file(s) are compressed...`);
+            return checkCompressedSvgFiles(svgFiles);
         }
 
         default:
@@ -511,4 +456,4 @@ if (require.main === module) {
 }
 
 export default run;
-export {generateMarkdownSummary, getFilesFromGithub, type CompressionSummary, type CompressionResult};
+export {type CompressionSummary};

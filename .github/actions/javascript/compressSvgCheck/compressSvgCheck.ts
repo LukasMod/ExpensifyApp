@@ -5,17 +5,12 @@ import compressSvg from '@scripts/compressSvg';
 async function run() {
     try {
         const token = core.getInput('GITHUB_TOKEN', {required: true});
-        if (!token) {
-            throw new Error('GITHUB_TOKEN is required');
-        }
-        const summary: CompressionSummary = await compressSvg('github', {token});
+        const summary: CompressionSummary = await compressSvg('pullRequest', {token});
 
-        if (summary.totalSavings > 0) {
-            // Files are not compressed. Run`npm run compress-svg` locally and check results on all platforms.
+        if (summary.totalSavings) {
             throw new Error(`SVG ${summary.totalFilesCompressed} file(s) were not compressed. Run 'npm run compress-svg' locally and check results on all platforms.`);
         }
 
-        // Files are compressed. Exit with success.
     } catch (error) {
         if (error instanceof Error) {
             core.setFailed(error);
