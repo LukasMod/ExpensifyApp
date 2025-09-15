@@ -16,7 +16,7 @@ type CompressionResult = {
 
 type CompressionSummary = {
     totalFiles: number;
-    totalFilesCompressed: number;
+    totalCompressedFilesLength: number;
     totalOriginalSize: number;
     totalCompressedSize: number;
     totalSavings: number;
@@ -185,15 +185,17 @@ function validateSvgFiles(filePaths: string[]): string[] {
 }
 
 function createResultsSummary(results: CompressionResult[]): CompressionSummary {
-    const totalFilesCompressed = results.filter((r) => !!r.savings).length;
-    const totalOriginalSize = results.reduce((sum, r) => sum + r.originalSize, 0);
-    const totalCompressedSize = results.reduce((sum, r) => sum + r.compressedSize, 0);
-    const totalSavings = results.reduce((sum, r) => sum + r.savings, 0);
+    const compressedFiles = results.filter((r) => !!r.savings);
+
+    const totalCompressedFilesLength = compressedFiles.length;
+    const totalOriginalSize = compressedFiles.reduce((sum, r) => sum + r.originalSize, 0);
+    const totalCompressedSize = compressedFiles.reduce((sum, r) => sum + r.compressedSize, 0);
+    const totalSavings = compressedFiles.reduce((sum, r) => sum + r.savings, 0);
     const totalSavingsPercent = totalOriginalSize > 0 ? (totalSavings / totalOriginalSize) * 100 : 0;
 
     return {
         totalFiles: results.length,
-        totalFilesCompressed,
+        totalCompressedFilesLength,
         totalOriginalSize,
         totalCompressedSize,
         totalSavings,
@@ -219,16 +221,15 @@ function getSummarySavingString({
 }
 
 function logSummary(summary: CompressionSummary) {
-    const {totalFiles, totalFilesCompressed, totalOriginalSize, totalCompressedSize, totalSavings, totalSavingsPercent, results} = summary;
+    const {totalFiles, totalCompressedFilesLength, totalOriginalSize, totalCompressedSize, totalSavings, totalSavingsPercent, results} = summary;
 
-    if (totalFilesCompressed) {
-        console.log('\n📋 Individual file results:');
-        results.forEach((result, index) => {
+    if (totalCompressedFilesLength) {
+        results.forEach((result) => {
             const {compressedSize, originalSize, savings, savingsPercent, filePath} = result;
             if (!result.savings) {
                 return;
             }
-            const prefix = `${index + 1}. ${filePath}: ✅`;
+            const prefix = `${filePath}: ✅`;
             console.log(
                 getSummarySavingString({
                     prefix,
@@ -239,34 +240,32 @@ function logSummary(summary: CompressionSummary) {
                 }),
             );
         });
+        console.log(`\nFiles processed: ${totalFiles}`);
+        console.log(`Files compressed: ${totalCompressedFilesLength}`);
+        console.log(
+            getSummarySavingString({
+                prefix: 'Savings:',
+                originalSize: totalOriginalSize,
+                compressedSize: totalCompressedSize,
+                savings: totalSavings,
+                savingsPercent: totalSavingsPercent,
+            }),
+        );
     } else {
         console.log('\n✅ All files already compressed');
     }
-
-    console.log(`\nFiles processed: ${totalFiles}`);
-    console.log(`Files compressed: ${totalFilesCompressed}`);
-    console.log(
-        getSummarySavingString({
-            prefix: 'Savings:',
-            originalSize: totalOriginalSize,
-            compressedSize: totalCompressedSize,
-            savings: totalSavings,
-            savingsPercent: totalSavingsPercent,
-        }),
-    );
 }
 
 function logSummaryCheck(summary: CompressionSummary) {
-    const {totalFiles, totalFilesCompressed, results} = summary;
+    const {totalFiles, totalCompressedFilesLength, results} = summary;
 
-    console.log('\n📋 Individual file results:');
     results.forEach((result) => {
         const {filePath, savings} = result;
         console.log(`${filePath}: ${savings > 0 ? 'Not properly compressed ❌' : 'Compressed ✅'}`);
     });
 
     console.log(`\nFiles processed: ${totalFiles}`);
-    console.log(`Files not properly compressed: ${totalFilesCompressed}`);
+    console.log(`Files not properly compressed: ${totalCompressedFilesLength}`);
 }
 
 function processFiles(svgFiles: string[], isSavingFile: boolean): CompressionResult[] {
