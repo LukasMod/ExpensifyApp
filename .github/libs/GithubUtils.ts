@@ -683,7 +683,6 @@ class GithubUtils {
                 owner: CONST.GITHUB_OWNER,
                 repo: CONST.APP_REPO,
                 pull_number: pullRequestNumber,
-                per_page: 100,
             })
             .then(({data}) => data.filter((file) => file.filename.endsWith('.svg') && (file.status === 'added' || file.status === 'modified')).map((file) => file.filename));
     }
