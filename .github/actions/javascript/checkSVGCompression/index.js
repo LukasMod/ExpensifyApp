@@ -20110,7 +20110,7 @@ async function run() {
         const token = core.getInput('GITHUB_TOKEN', { required: true });
         const summary = await (0, compressSvg_1.default)('pullRequest', { token });
         if (summary.totalSavings) {
-            throw new Error(`SVG ${summary.totalFilesCompressed} file(s) were not compressed. Run 'npm run compress-svg' locally and check results on all platforms.`);
+            throw new Error(`SVG ${summary.totalCompressedFilesLength} file(s) were not compressed. Run 'npm run compress-svg' locally and check results on all platforms.`);
         }
     }
     catch (error) {
@@ -21211,7 +21211,7 @@ async function run(mode, options) {
         case 'pullRequest': {
             const svgFiles = await getChangedSvgFilesFromGithub();
             if (!svgFiles.length) {
-                console.log('❌ No changed SVG files found. Skipping compression.');
+                console.log('❌ No changed SVG files found in Pull Request');
             }
             const { regular: regularSvgFiles, ignored: ignoredFiles } = splitFilesBySuffix(svgFiles);
             return checkCompressedSvgFiles(regularSvgFiles, ignoredFiles);

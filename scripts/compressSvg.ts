@@ -410,7 +410,7 @@ async function run(mode: 'directory' | 'files' | 'pullRequest', options?: {targe
         case 'pullRequest': {
             const svgFiles = await getChangedSvgFilesFromGithub();
             if (!svgFiles.length) {
-                console.log('❌ No changed SVG files found. Skipping compression.');
+                console.log('❌ No changed SVG files found in Pull Request');
             }
             const {regular: regularSvgFiles, ignored: ignoredFiles} = splitFilesBySuffix(svgFiles);
 
