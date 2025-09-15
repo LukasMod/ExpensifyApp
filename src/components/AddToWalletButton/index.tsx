@@ -7,4 +7,6 @@ function AddToWalletButton(_props: AddToWalletButtonProps) {
 
 AddToWalletButton.displayName = 'AddToWalletButton';
 
+/// / test
+
 export default AddToWalletButton;
