@@ -196,7 +196,7 @@ function createResultsSummary(results: CompressionResult[], ignoredFiles: string
     const totalSavingsPercent = totalOriginalSize > 0 ? (totalSavings / totalOriginalSize) * 100 : 0;
 
     return {
-        totalFiles: results.length,
+        totalFiles: results.length + ignoredFiles.length,
         totalCompressedFilesLength,
         totalOriginalSize,
         totalCompressedSize,
@@ -308,7 +308,7 @@ function compressSvgFiles(regularSvgFiles: string[], ignoredFiles: string[] = []
 }
 
 function checkCompressedSvgFiles(regularSvgFiles: string[], ignoredFiles: string[] = []) {
-    console.log(`🚀 Checking if ${regularSvgFiles.length} SVG file(s) are compressed...`);
+    console.log(`🚀 Checking if all SVG files are compressed...`);
     const results = processFiles(regularSvgFiles, false);
     const summary = createResultsSummary(results, ignoredFiles);
     logSummaryCheck(summary);
