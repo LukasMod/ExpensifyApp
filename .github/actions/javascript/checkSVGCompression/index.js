@@ -20896,6 +20896,7 @@ const fs = __importStar(__nccwpck_require__(7147));
 const path = __importStar(__nccwpck_require__(1017));
 const svgo_1 = __nccwpck_require__(2456);
 const GithubUtils_1 = __importDefault(__nccwpck_require__(9296));
+const IGNORE_SUFFIX = '-ignore-compression';
 // SVGO Default plugins
 const svgoConfig = {
     plugins: [
@@ -21026,42 +21027,54 @@ function validateSvgFiles(filePaths) {
         }
         validFiles.push(resolvedPath);
     }
-    if (errors.length > 0) {
+    if (errors.length) {
         console.error('Validation errors:');
         errors.forEach((error) => console.error(`   ${error}`));
         throw new Error('SVG file validation failed');
     }
     return validFiles;
 }
-function createResultsSummary(results) {
-    const totalFilesCompressed = results.filter((r) => !!r.savings).length;
-    const totalOriginalSize = results.reduce((sum, r) => sum + r.originalSize, 0);
-    const totalCompressedSize = results.reduce((sum, r) => sum + r.compressedSize, 0);
-    const totalSavings = results.reduce((sum, r) => sum + r.savings, 0);
+function createResultsSummary(results, ignoredFiles = []) {
+    const compressedFiles = results.filter((r) => !!r.savings);
+    const totalCompressedFilesLength = compressedFiles.length;
+    const totalOriginalSize = compressedFiles.reduce((sum, r) => sum + r.originalSize, 0);
+    const totalCompressedSize = compressedFiles.reduce((sum, r) => sum + r.compressedSize, 0);
+    const totalSavings = compressedFiles.reduce((sum, r) => sum + r.savings, 0);
     const totalSavingsPercent = totalOriginalSize > 0 ? (totalSavings / totalOriginalSize) * 100 : 0;
     return {
         totalFiles: results.length,
-        totalFilesCompressed,
+        totalCompressedFilesLength,
         totalOriginalSize,
         totalCompressedSize,
         totalSavings,
         totalSavingsPercent,
         results,
+        ignoredFiles,
     };
 }
 function getSummarySavingString({ prefix, originalSize, compressedSize, savings, savingsPercent, }) {
     return `${prefix} ${formatBytes(originalSize)} KB → ${formatBytes(compressedSize)} KB | ${`${formatBytes(savings)} KB (${savingsPercent.toFixed(2)}%)`}`;
 }
+function logIgnoredFiles(ignoredFiles) {
+    if (!ignoredFiles.length) {
+        return;
+    }
+    console.log('\nFiles skipped (ignore-compression):');
+    ignoredFiles.forEach((filePath) => {
+        console.log(`${filePath}: ⏭️  Skipped`);
+    });
+}
 function logSummary(summary) {
-    const { totalFiles, totalFilesCompressed, totalOriginalSize, totalCompressedSize, totalSavings, totalSavingsPercent, results } = summary;
-    if (totalFilesCompressed) {
-        console.log('\n📋 Individual file results:');
-        results.forEach((result, index) => {
+    const { totalFiles, totalCompressedFilesLength, totalOriginalSize, totalCompressedSize, totalSavings, totalSavingsPercent, results, ignoredFiles } = summary;
+    logIgnoredFiles(ignoredFiles);
+    if (totalCompressedFilesLength) {
+        console.log('\nFiles compressed:');
+        results.forEach((result) => {
             const { compressedSize, originalSize, savings, savingsPercent, filePath } = result;
             if (!result.savings) {
                 return;
             }
-            const prefix = `${index + 1}. ${filePath}: ✅`;
+            const prefix = `${filePath}: ✅`;
             console.log(getSummarySavingString({
                 prefix,
                 compressedSize,
@@ -21070,29 +21083,30 @@ function logSummary(summary) {
                 savingsPercent,
             }));
         });
+        console.log(`\nFiles processed: ${totalFiles}`);
+        console.log(`Files compressed: ${totalCompressedFilesLength}`);
+        console.log(`Files ignored: ${ignoredFiles.length}`);
+        console.log(getSummarySavingString({
+            prefix: 'Savings:',
+            originalSize: totalOriginalSize,
+            compressedSize: totalCompressedSize,
+            savings: totalSavings,
+            savingsPercent: totalSavingsPercent,
+        }));
     }
     else {
         console.log('\n✅ All files already compressed');
     }
-    console.log(`\nFiles processed: ${totalFiles}`);
-    console.log(`Files compressed: ${totalFilesCompressed}`);
-    console.log(getSummarySavingString({
-        prefix: 'Savings:',
-        originalSize: totalOriginalSize,
-        compressedSize: totalCompressedSize,
-        savings: totalSavings,
-        savingsPercent: totalSavingsPercent,
-    }));
 }
 function logSummaryCheck(summary) {
-    const { totalFiles, totalFilesCompressed, results } = summary;
-    console.log('\n📋 Individual file results:');
+    const { totalFiles, totalCompressedFilesLength, results, ignoredFiles } = summary;
     results.forEach((result) => {
         const { filePath, savings } = result;
         console.log(`${filePath}: ${savings > 0 ? 'Not properly compressed ❌' : 'Compressed ✅'}`);
     });
+    logIgnoredFiles(ignoredFiles);
     console.log(`\nFiles processed: ${totalFiles}`);
-    console.log(`Files not properly compressed: ${totalFilesCompressed}`);
+    console.log(`Files not properly compressed: ${totalCompressedFilesLength}`);
 }
 function processFiles(svgFiles, isSavingFile) {
     const results = [];
@@ -21102,17 +21116,17 @@ function processFiles(svgFiles, isSavingFile) {
     }
     return results;
 }
-function compressSvgFiles(svgFiles) {
-    console.log(`🚀 Starting compression ${svgFiles.length} SVG file(s)`);
-    const results = processFiles(svgFiles, true);
-    const summary = createResultsSummary(results);
+function compressSvgFiles(regularSvgFiles, ignoredFiles = []) {
+    console.log(`🚀 Starting compression ${regularSvgFiles.length} SVG file(s)`);
+    const results = processFiles(regularSvgFiles, true);
+    const summary = createResultsSummary(results, ignoredFiles);
     logSummary(summary);
     return summary;
 }
-function checkCompressedSvgFiles(svgFiles) {
-    console.log(`🚀 Checking if ${svgFiles.length} SVG file(s) are compressed...`);
-    const results = processFiles(svgFiles, false);
-    const summary = createResultsSummary(results);
+function checkCompressedSvgFiles(regularSvgFiles, ignoredFiles = []) {
+    console.log(`🚀 Checking if ${regularSvgFiles.length} SVG file(s) are compressed...`);
+    const results = processFiles(regularSvgFiles, false);
+    const summary = createResultsSummary(results, ignoredFiles);
     logSummaryCheck(summary);
     return summary;
 }
@@ -21150,7 +21164,23 @@ function logHelp() {
     console.log('  --dir         Compress all SVG files in specified directory');
     console.log('  --files       Compress specified SVG files');
     console.log('');
+    console.log('To ignore compression for a file, add "-ignore-compression" to the file name: file-ignore-compression.svg');
+    console.log('');
 }
+const splitFilesBySuffix = (files) => {
+    const regularFiles = [];
+    const ignoredFiles = [];
+    for (const file of files) {
+        const fileName = path.basename(file);
+        if (fileName.endsWith(`${IGNORE_SUFFIX}.svg`)) {
+            ignoredFiles.push(file);
+        }
+        else {
+            regularFiles.push(file);
+        }
+    }
+    return { regular: regularFiles, ignored: ignoredFiles };
+};
 async function run(mode, options) {
     console.log('🔍 Searching for SVG files...');
     switch (mode) {
@@ -21162,7 +21192,8 @@ async function run(mode, options) {
             if (!svgFiles.length) {
                 console.log('❌ No SVG files found in the specified directory.');
             }
-            return compressSvgFiles(svgFiles);
+            const { regular: regularSvgFiles, ignored: ignoredFiles } = splitFilesBySuffix(svgFiles);
+            return compressSvgFiles(regularSvgFiles, ignoredFiles);
         }
         case 'files': {
             if (!options?.filePaths?.length) {
@@ -21172,14 +21203,16 @@ async function run(mode, options) {
             if (!svgFiles.length) {
                 console.log('❌ No valid SVG files provided.');
             }
-            return compressSvgFiles(svgFiles);
+            const { regular: regularSvgFiles, ignored: ignoredFiles } = splitFilesBySuffix(svgFiles);
+            return compressSvgFiles(regularSvgFiles, ignoredFiles);
         }
         case 'pullRequest': {
             const svgFiles = await getChangedSvgFilesFromGithub();
             if (!svgFiles.length) {
                 console.log('❌ No changed SVG files found. Skipping compression.');
             }
-            return checkCompressedSvgFiles(svgFiles);
+            const { regular: regularSvgFiles, ignored: ignoredFiles } = splitFilesBySuffix(svgFiles);
+            return checkCompressedSvgFiles(regularSvgFiles, ignoredFiles);
         }
         default:
             throw new Error(`Unknown compression mode: ${mode}`);
