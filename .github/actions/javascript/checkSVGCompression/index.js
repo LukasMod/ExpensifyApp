@@ -20061,7 +20061,7 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
-/***/ 4938:
+/***/ 9906:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -20108,15 +20108,10 @@ const compressSvg_1 = __importDefault(__nccwpck_require__(6482));
 async function run() {
     try {
         const token = core.getInput('GITHUB_TOKEN', { required: true });
-        if (!token) {
-            throw new Error('GITHUB_TOKEN is required');
-        }
-        const summary = await (0, compressSvg_1.default)('github', { token });
-        if (summary.totalSavings > 0) {
-            // Files are not compressed. Run`npm run compress-svg` locally and check results on all platforms.
+        const summary = await (0, compressSvg_1.default)('pullRequest', { token });
+        if (summary.totalSavings) {
             throw new Error(`SVG ${summary.totalFilesCompressed} file(s) were not compressed. Run 'npm run compress-svg' locally and check results on all platforms.`);
         }
-        // Files are compressed. Exit with success.
     }
     catch (error) {
         if (error instanceof Error) {
@@ -20896,8 +20891,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.generateMarkdownSummary = generateMarkdownSummary;
-exports.getFilesFromGithub = getFilesFromGithub;
 const github = __importStar(__nccwpck_require__(5438));
 const fs = __importStar(__nccwpck_require__(7147));
 const path = __importStar(__nccwpck_require__(1017));
@@ -21109,51 +21102,29 @@ function logSummaryCheck(summary) {
     console.log(`Files not properly compressed: ${totalFilesCompressed}`);
 }
 function processFiles(svgFiles, isSavingFile) {
-    console.log(`🚀 Starting compression (${!isSavingFile ? 'check' : ''})... ${svgFiles.length} SVG file(s)`);
     const results = [];
     for (const file of svgFiles) {
         const result = compressSvgFile(file, isSavingFile);
         results.push(result);
     }
+    return results;
+}
+function compressSvgFiles(svgFiles) {
+    console.log(`🚀 Starting compression ${svgFiles.length} SVG file(s)`);
+    const results = processFiles(svgFiles, true);
     const summary = createResultsSummary(results);
-    if (isSavingFile) {
-        logSummary(summary);
-    }
-    else {
-        logSummaryCheck(summary);
-    }
+    logSummary(summary);
     return summary;
 }
-function generateMarkdownSummary(summary) {
-    const { totalFiles, totalFilesCompressed, totalOriginalSize, totalCompressedSize, totalSavings, totalSavingsPercent, results } = summary;
-    const markdown = [];
-    markdown.push('## SVG Compression Summary\n');
-    markdown.push(`Files processed: ${totalFiles}`);
-    markdown.push(`Files compressed: ${totalFilesCompressed}`);
-    markdown.push(`Original size: ${formatBytes(totalOriginalSize)} KB`);
-    markdown.push(getSummarySavingString({
-        prefix: 'Savings:',
-        originalSize: totalOriginalSize,
-        compressedSize: totalCompressedSize,
-        savings: totalSavings,
-        savingsPercent: totalSavingsPercent,
-    }));
-    markdown.push('');
-    if (results.length) {
-        markdown.push('| File | Original | Compressed | Savings |');
-        markdown.push('|------|----------|------------|---------|');
-        results.forEach((result) => {
-            const { originalSize, compressedSize, savings, savingsPercent, filePath } = result;
-            const savingsText = savings > 0 ? `${formatBytes(savings)} KB (${savingsPercent.toFixed(1)}%)` : ' --';
-            markdown.push(`| \`${filePath}\` | ${formatBytes(originalSize)} KB | ${formatBytes(compressedSize)} KB | ${savingsText} |`);
-        });
-    }
-    markdown.push('');
-    return markdown.join('\n');
+function checkCompressedSvgFiles(svgFiles) {
+    console.log(`🚀 Checking if ${svgFiles.length} SVG file(s) are compressed...`);
+    const results = processFiles(svgFiles, false);
+    const summary = createResultsSummary(results);
+    logSummaryCheck(summary);
+    return summary;
 }
-async function getFilesFromGithub() {
+async function getChangedSvgFilesFromGithub() {
     try {
-        // fetch all svg files that were changed/added in this PR
         const pullRequestNumber = github.context.payload.pull_request?.number;
         if (!pullRequestNumber) {
             console.log('No pull request number found');
@@ -21164,31 +21135,13 @@ async function getFilesFromGithub() {
             .filter((file) => path.extname(file.toLowerCase()) === '.svg')
             .map((file) => path.resolve(file))
             .filter((file) => fs.existsSync(file));
-        console.log(`Found ${svgFiles.length} changed SVG files in PR`);
+        console.log(`Found ${svgFiles.length} changed SVG file(s) in PR`);
         return svgFiles;
     }
     catch (error) {
         console.error('❌ Error getting files from GitHub:', error);
         return [];
     }
-    // const changedFilesOutput = execSync('gh pr diff --name-only', {
-    //     encoding: 'utf8',
-    //     cwd: process.cwd(),
-    // })
-    //     .toString()
-    //     .trim();
-    // if (!changedFilesOutput) {
-    //     console.log('No changed files found in PR');
-    //     return [];
-    // }
-    // Filter only SVG files and resolve their paths
-    // const changedFiles = changedFilesOutput.split('\n');
-    // const svgFiles = changedFiles
-    //     .filter((file) => path.extname(file.toLowerCase()) === '.svg')
-    //     .map((file) => path.resolve(file))
-    //     .filter((file) => fs.existsSync(file));
-    // console.log(`Found ${svgFiles.length} changed SVG files in PR`);
-    // return svgFiles;
 }
 function logHelp() {
     console.log('');
@@ -21217,24 +21170,26 @@ async function run(mode, options) {
             if (!svgFiles.length) {
                 console.log('❌ No SVG files found in the specified directory.');
             }
-            return processFiles(svgFiles, true);
+            return compressSvgFiles(svgFiles);
         }
         case 'files': {
             if (!options?.filePaths?.length) {
                 throw new Error('filePaths is required for files mode');
             }
-            const validatedFiles = validateSvgFiles(options.filePaths);
-            if (!validatedFiles.length) {
+            const svgFiles = validateSvgFiles(options.filePaths);
+            if (!svgFiles.length) {
                 console.log('❌ No valid SVG files provided.');
             }
-            return processFiles(validatedFiles, true);
+            console.log(`🚀 Starting compression ${svgFiles.length} SVG file(s)`);
+            return compressSvgFiles(svgFiles);
         }
-        case 'github': {
-            const changedSvgFiles = await getFilesFromGithub();
-            if (!changedSvgFiles.length) {
+        case 'pullRequest': {
+            const svgFiles = await getChangedSvgFilesFromGithub();
+            if (!svgFiles.length) {
                 console.log('❌ No changed SVG files found. Skipping compression.');
             }
-            return processFiles(changedSvgFiles, false);
+            console.log(`🚀 Checking if ${svgFiles.length} SVG file(s) are compressed...`);
+            return checkCompressedSvgFiles(svgFiles);
         }
         default:
             throw new Error(`Unknown compression mode: ${mode}`);
@@ -52507,7 +52462,7 @@ module.exports = JSON.parse('[[[0,44],"disallowed_STD3_valid"],[[45,46],"valid"]
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(4938);
+/******/ 	var __webpack_exports__ = __nccwpck_require__(9906);
 /******/ 	module.exports = __webpack_exports__;
 /******/ 	
 /******/ })()
