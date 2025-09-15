@@ -278,6 +278,7 @@ function logSummary(summary: CompressionSummary) {
 function logSummaryCheck(summary: CompressionSummary) {
     const {totalFiles, totalCompressedFilesLength, results, ignoredFiles} = summary;
 
+    console.log('');
     results.forEach((result) => {
         const {filePath, savings} = result;
         console.log(`${filePath}: ${savings > 0 ? 'Not properly compressed ❌' : 'Compressed ✅'}`);
