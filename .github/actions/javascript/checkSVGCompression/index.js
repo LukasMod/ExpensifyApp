@@ -21074,8 +21074,7 @@ function logSummary(summary) {
     else {
         console.log('\n✅ All files already compressed');
     }
-    console.log('\nCOMPRESSION SUMMARY');
-    console.log(`Files processed: ${totalFiles}`);
+    console.log(`\nFiles processed: ${totalFiles}`);
     console.log(`Files compressed: ${totalFilesCompressed}`);
     console.log(getSummarySavingString({
         prefix: 'Savings:',
@@ -21087,18 +21086,12 @@ function logSummary(summary) {
 }
 function logSummaryCheck(summary) {
     const { totalFiles, totalFilesCompressed, results } = summary;
-    if (totalFilesCompressed) {
-        console.log('\n📋 Individual file results:');
-        results.forEach((result) => {
-            const { filePath, savings } = result;
-            console.log(`${filePath}: ${savings > 0 ? 'Not properly compressed ❌' : 'Compressed ✅'}`);
-        });
-    }
-    else {
-        console.log('\n✅ All files already compressed');
-    }
-    console.log('\nCOMPRESSION CHECK SUMMARY');
-    console.log(`Files processed: ${totalFiles}`);
+    console.log('\n📋 Individual file results:');
+    results.forEach((result) => {
+        const { filePath, savings } = result;
+        console.log(`${filePath}: ${savings > 0 ? 'Not properly compressed ❌' : 'Compressed ✅'}`);
+    });
+    console.log(`\nFiles processed: ${totalFiles}`);
     console.log(`Files not properly compressed: ${totalFilesCompressed}`);
 }
 function processFiles(svgFiles, isSavingFile) {
