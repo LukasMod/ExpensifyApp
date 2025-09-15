@@ -21084,8 +21084,8 @@ function logSummary(summary) {
             }));
         });
         console.log(`\nFiles processed: ${totalFiles}`);
-        console.log(`Files compressed: ${totalCompressedFilesLength}`);
         console.log(`Files ignored: ${ignoredFiles.length}`);
+        console.log(`Files compressed: ${totalCompressedFilesLength}`);
         console.log(getSummarySavingString({
             prefix: 'Savings:',
             originalSize: totalOriginalSize,
@@ -21107,6 +21107,7 @@ function logSummaryCheck(summary) {
     });
     logIgnoredFiles(ignoredFiles);
     console.log(`\nFiles processed: ${totalFiles}`);
+    console.log(`Files ignored: ${ignoredFiles.length}`);
     console.log(`Files not properly compressed: ${totalCompressedFilesLength}`);
 }
 function processFiles(svgFiles, isSavingFile) {

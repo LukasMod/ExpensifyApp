@@ -259,8 +259,8 @@ function logSummary(summary: CompressionSummary) {
         });
 
         console.log(`\nFiles processed: ${totalFiles}`);
-        console.log(`Files compressed: ${totalCompressedFilesLength}`);
         console.log(`Files ignored: ${ignoredFiles.length}`);
+        console.log(`Files compressed: ${totalCompressedFilesLength}`);
         console.log(
             getSummarySavingString({
                 prefix: 'Savings:',
@@ -286,6 +286,7 @@ function logSummaryCheck(summary: CompressionSummary) {
     logIgnoredFiles(ignoredFiles);
 
     console.log(`\nFiles processed: ${totalFiles}`);
+    console.log(`Files ignored: ${ignoredFiles.length}`);
     console.log(`Files not properly compressed: ${totalCompressedFilesLength}`);
 }
 
