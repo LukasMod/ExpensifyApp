@@ -8,8 +8,8 @@ const isHybrid = process.env.IS_HYBRID_APP === 'true';
 /** @type {import('@rock-js/config').Config} */
 export default {
     remoteCacheProvider: providerGitHub({
-        owner: 'Expensify',
-        repository: 'App',
+        owner: 'LukasMod',
+        repository: 'ExpensifyApp',
         token: process.env.GITHUB_TOKEN,
     }),
     bundler: pluginMetro(),
