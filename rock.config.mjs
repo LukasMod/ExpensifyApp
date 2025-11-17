@@ -8,13 +8,10 @@ const isPublicAccess = !process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET
 
 /** @type {import('@rock-js/config').Config} */
 export default {
-    remoteCacheProvider: providerS3({
-        bucket: 'ad-hoc-expensify-cash',
-        region: 'us-east-1',
-        acl: 'public-read',
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-        publicAccess: isPublicAccess,
+    remoteCacheProvider: providerGitHub({
+        owner: 'Expensify',
+        repository: 'App',
+        token: process.env.GITHUB_TOKEN,
     }),
     bundler: pluginMetro(),
     platforms: {
