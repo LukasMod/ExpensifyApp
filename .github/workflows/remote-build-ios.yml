@@ -4,12 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       mobile_expensify_pr:
-        description: 'Mobile-Expensify PR number to use for hybrid build'
+        description: "Mobile-Expensify PR number to use for hybrid build"
         required: false
         type: string
   push:
     branches-ignore: [staging, production, cherry-pick-*]
-    paths-ignore: ['docs/**', 'contributingGuides/**', 'help/**', '.github/**', 'scripts/**', 'tests/**']
+    paths-ignore:
+      [
+        "docs/**",
+        "contributingGuides/**",
+        "help/**",
+        ".github/**",
+        "scripts/**",
+        "tests/**",
+      ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,8 +32,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - scheme: 'New Expensify Dev'
-            configuration: 'DebugDevelopment'
+          - scheme: "New Expensify Dev"
+            configuration: "DebugDevelopment"
             is_hybrid_build: false
 
           # - scheme: 'Expensify Dev'
@@ -45,8 +53,8 @@ jobs:
           IS_HYBRID_BUILD: ${{ matrix.is_hybrid_build && 'true' || 'false' }}
 
       - name: Rock Remote Build - iOS
-        # rock v3
-        uses: callstackincubator/ios@08a533dbeda6adec39f94d08d820091514d1f7af
+        # rock v3 - using fork with extra fingerprint check
+        uses: LukasMod/ios@399a317
         env:
           GITHUB_TOKEN: ${{ github.token }}
           IS_HYBRID_APP: ${{ matrix.is_hybrid_build }}
