@@ -54,7 +54,7 @@ jobs:
 
       - name: Rock Remote Build - iOS
         # rock v3 - using fork with extra fingerprint check
-        uses: LukasMod/ios@399a317
+        uses: LukasMod/ios@34eb3b86b7a568a60204628adbed0983a74c87e8
         env:
           GITHUB_TOKEN: ${{ github.token }}
           IS_HYBRID_APP: ${{ matrix.is_hybrid_build }}
