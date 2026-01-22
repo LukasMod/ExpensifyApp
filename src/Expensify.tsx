@@ -121,6 +121,8 @@ function Expensify() {
     const [stashedCredentials = CONST.EMPTY_OBJECT] = useOnyx(ONYXKEYS.STASHED_CREDENTIALS, {canBeMissing: true});
     const [stashedSession] = useOnyx(ONYXKEYS.STASHED_SESSION, {canBeMissing: true});
 
+    console.log('TEST 1', )
+
     useDebugShortcut();
     usePriorityMode();
 
