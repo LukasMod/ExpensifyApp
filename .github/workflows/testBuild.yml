@@ -275,7 +275,7 @@ jobs:
         if: ${{ needs.prep.outputs.APP_PR_NUMBER || (!needs.prep.outputs.APP_PR_NUMBER && !needs.getMobileExpensifyPR.outputs.MOBILE_EXPENSIFY_PR) }}
         uses: ./.github/actions/javascript/postTestBuildComment
         with:
-          REPO: App
+          REPO: ExpensifyApp
           APP_PR_NUMBER: ${{ needs.prep.outputs.APP_PR_NUMBER }}
           MOBILE_EXPENSIFY_PR_NUMBER: ${{ needs.getMobileExpensifyPR.outputs.MOBILE_EXPENSIFY_PR }}
           GITHUB_TOKEN: ${{ github.token }}
