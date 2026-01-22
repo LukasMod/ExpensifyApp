@@ -211,7 +211,7 @@ jobs:
     name: Build and deploy Web
     if: ${{ (github.event_name == 'push' || inputs.WEB) && needs.prep.outputs.APP_PR_NUMBER }}
     needs: [prep]
-    runs-on: ubuntu-latest-xl
+    runs-on: ubuntu-latest
     env:
       PULL_REQUEST_NUMBER: ${{ needs.prep.outputs.APP_PR_NUMBER }}
     steps:
@@ -224,7 +224,7 @@ jobs:
     name: Build Android HybridApp
     if: ${{ github.event_name == 'push' || inputs.ANDROID }}
     needs: [prep, getMobileExpensifyPR, getMobileExpensifyRef]
-    runs-on: ubuntu-latest-xl
+    runs-on: ubuntu-latest
     env:
       PULL_REQUEST_NUMBER: ${{ needs.prep.outputs.APP_PR_NUMBER }}
     outputs:
@@ -244,7 +244,7 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.0.app/Contents/Developer
       PULL_REQUEST_NUMBER: ${{ needs.prep.outputs.APP_PR_NUMBER }}
-    runs-on: macos-15-xlarge
+    runs-on: macos-15
     outputs:
       ROCK_IOS_ADHOC_INDEX_URL: ${{ steps.set-artifact-url.outputs.ARTIFACT_URL }}
     steps:
