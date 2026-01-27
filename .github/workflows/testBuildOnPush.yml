@@ -1,0 +1,155 @@
+
+name: Build and deploy apps for testing on push
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', 'contributingGuides/**', 'help/**', '.github/**', 'scripts/**', 'tests/**', 'jest/**', '.claude/**']
+
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    outputs:
+      APP_REF: ${{ github.sha }}
+      APP_PR_NUMBER: ${{ steps.getMergedPullRequest.outputs.number }}
+      BUILD_WEB: ${{ steps.detectOSBotifyPush.outputs.BUILD_WEB || 'true' }}
+      BUILD_MOBILE: ${{ steps.detectOSBotifyPush.outputs.BUILD_MOBILE || 'true' }}
+      POST_COMMENTS: ${{ steps.detectOSBotifyPush.outputs.POST_COMMENTS || 'true' }}
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
+
+      - name: Validate that user is an Expensify employee
+        uses: ./.github/actions/composite/validateActor
+        with:
+          REQUIRE_APP_DEPLOYER: false
+          OS_BOTIFY_TOKEN: ${{ secrets.OS_BOTIFY_COMMIT_TOKEN }}
+
+      - name: Echo GitHub actor
+        run: |
+          echo "GitHub actor: ${{ github.actor }}"
+
+      - name: Detect OSBotify automated push
+        id: detectOSBotifyPush
+        if: ${{ github.actor == 'OSBotify' }}
+
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if [[ "$COMMIT_MESSAGE" == Update\ Mobile-Expensify\ submodule* ]]; then
+            echo "::notice::✅ OSBotify Mobile-Expensify submodule update detected. Building native only."
+            {
+              echo "BUILD_WEB=false"
+              echo "POST_COMMENTS=false"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::⏭️ OSBotify automated push detected but without Mobile-Expensify submodule update. Skipping workflow."
+            {
+              echo "BUILD_MOBILE=false"
+              echo "BUILD_WEB=false"
+              echo "POST_COMMENTS=false"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get merged pull request
+        id: getMergedPullRequest
+        if: ${{ github.actor != 'OSBotify' }}
+        uses: actions-ecosystem/action-get-merged-pull-request@59afe90821bb0b555082ce8ff1e36b03f91553d9
+        with:
+          github_token: ${{ github.token }}
+
+  postGitHubCommentBuildStarted:
+    name: Post build started comment
+    runs-on: ubuntu-latest
+    if: ${{ needs.prep.outputs.POST_COMMENTS == 'true' }}
+    needs: [prep]
+    steps:
+      - name: Add build start comment to Expensify/App PR
+        if: ${{ needs.prep.outputs.APP_PR_NUMBER != '' }}
+        # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          github-token: ${{ github.token }}
+          script: |
+              const workflowURL = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+              github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ needs.prep.outputs.APP_PR_NUMBER }},
+              body: `🚧 @${{ github.actor }} has triggered a test Expensify/App build. You can view the [workflow run here](${workflowURL}).`
+              });
+
+  web:
+    name: Build and deploy Web
+    if: ${{ needs.prep.outputs.BUILD_WEB == 'true' && needs.prep.outputs.APP_PR_NUMBER }}
+    needs: [prep]
+    runs-on: ubuntu-latest
+    env:
+      PULL_REQUEST_NUMBER: ${{ needs.prep.outputs.APP_PR_NUMBER || '' }}
+    steps:
+      - name: Placeholder - web build skipped
+        run: |
+          echo "Placeholder: web build intentionally skipped for workflow verification."
+          echo "Reached web job with PULL_REQUEST_NUMBER=$PULL_REQUEST_NUMBER"
+
+  androidHybrid:
+    name: Build Android HybridApp
+    if: ${{ needs.prep.outputs.BUILD_MOBILE == 'true' }}
+    needs: [prep]
+    runs-on: ubuntu-latest
+    env:
+      PULL_REQUEST_NUMBER: ${{ needs.prep.outputs.APP_PR_NUMBER || '' }}
+    outputs:
+      ROCK_ANDROID_ADHOC_INDEX_URL: ${{ steps.set-artifact-url.outputs.ARTIFACT_URL }}
+    steps:
+      - name: Placeholder - android build skipped
+        id: set-artifact-url
+        run: |
+          echo "Placeholder: android build intentionally skipped for workflow verification."
+          echo "Reached android job with PULL_REQUEST_NUMBER=$PULL_REQUEST_NUMBER"
+          echo "ARTIFACT_URL=https://expensify.app/ANDROID_LINK" >> "$GITHUB_OUTPUT"
+
+  iosHybrid:
+    name: Build and deploy iOS for testing
+    if: ${{ needs.prep.outputs.BUILD_MOBILE == 'true' }}
+    needs: [prep]
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.0.app/Contents/Developer
+      PULL_REQUEST_NUMBER: ${{ needs.prep.outputs.APP_PR_NUMBER || '' }}
+    runs-on: macos-15
+    outputs:
+      ROCK_IOS_ADHOC_INDEX_URL: ${{ steps.set-artifact-url.outputs.ARTIFACT_URL }}
+    steps:
+      - name: Placeholder - ios build skipped
+        id: set-artifact-url
+        run: |
+          echo "Placeholder: ios build intentionally skipped for workflow verification."
+          echo "Reached ios job with PULL_REQUEST_NUMBER=$PULL_REQUEST_NUMBER"
+          echo "ARTIFACT_URL=https://expensify.app/IOS_LINK" >> "$GITHUB_OUTPUT"
+
+  postGithubComment:
+    runs-on: ubuntu-latest
+    if: ${{ always() && needs.prep.outputs.POST_COMMENTS == 'true' }}
+    name: Post a GitHub comment with app download links for testing
+    needs: [prep, web, androidHybrid, iosHybrid]
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
+        with:
+          ref: ${{ needs.prep.outputs.APP_REF }}
+
+      - name: Publish links to apps for download on Expensify/App PR
+        if: ${{ needs.prep.outputs.APP_PR_NUMBER }}
+        uses: ./.github/actions/javascript/postTestBuildComment
+        with:
+          REPO: App
+          APP_PR_NUMBER: ${{ needs.prep.outputs.APP_PR_NUMBER }}
+          GITHUB_TOKEN: ${{ github.token }}
+          ANDROID: ${{ needs.androidHybrid.result }}
+          IOS: ${{ needs.iosHybrid.result }}
+          WEB: ${{ needs.web.result }}
+          ANDROID_LINK: ${{ needs.androidHybrid.outputs.ROCK_ANDROID_ADHOC_INDEX_URL || ''}}
+          IOS_LINK: ${{ needs.iosHybrid.outputs.ROCK_IOS_ADHOC_INDEX_URL || ''}}
+          WEB_LINK: https://${{ needs.prep.outputs.APP_PR_NUMBER }}.pr-testing.expensify.com
