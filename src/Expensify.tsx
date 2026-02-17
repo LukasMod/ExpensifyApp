@@ -1,3 +1,4 @@
+// PR PR-8506 - Auto-generated change (2026-02-17 10:19:51)
 import HybridAppModule from '@expensify/react-native-hybrid-app';
 import * as Sentry from '@sentry/react-native';
 import React, {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
