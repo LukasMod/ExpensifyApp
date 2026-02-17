@@ -78,7 +78,10 @@ jobs:
       - name: Commit new Mobile-Expensify version
         working-directory: Mobile-Expensify
         run: |
-          git commit --allow-empty -m "Update version to ${{ steps.bumpVersion.outputs.NEW_VERSION }}"
+          NEW_VERSION="${{ steps.bumpVersion.outputs.NEW_VERSION }}"
+          jq --arg v "$NEW_VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
+          git add package.json
+          git commit -m "Update version to $NEW_VERSION"
           DETACHED_COMMIT=$(git rev-parse HEAD)
           git checkout main && git pull origin main
           git cherry-pick "$DETACHED_COMMIT"
