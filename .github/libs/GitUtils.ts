@@ -111,7 +111,7 @@ function getValidMergedPRs(commits: CommitType[]): number[] {
 async function getPullRequestsDeployedBetween(fromTag: string, toTag: string, repositoryName: string) {
     console.log(`Looking for commits made between ${fromTag} and ${toTag}...`);
     const apiCommitList = await GithubUtils.getCommitHistoryBetweenTags(fromTag, toTag, repositoryName);
-    const apiPullRequestNumbers = getValidMergedPRs(apiCommitList).sort((a, b) => a - b);
+    const apiPullRequestNumbers = getValidMergedPRs(apiCommitList);
 
     console.log(`Found ${apiCommitList.length} commits.`);
     core.startGroup('Parsed PRs:');

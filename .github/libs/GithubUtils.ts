@@ -316,6 +316,7 @@ class GithubUtils {
         resolvedInternalQAPRs: string[] = [],
         isFirebaseChecked = false,
         isGHStatusChecked = false,
+        chronologicalSection = '',
     ): Promise<void | StagingDeployCashBody> {
         return this.fetchAllPullRequests(PRList.map((pr) => this.getPullRequestNumberFromURL(pr)))
             .then((data) => {
@@ -400,6 +401,11 @@ class GithubUtils {
                             issueBody += URL;
                             issueBody += '\r\n';
                         }
+                        issueBody += '\r\n\r\n';
+                    }
+
+                    if (chronologicalSection) {
+                        issueBody += chronologicalSection;
                         issueBody += '\r\n\r\n';
                     }
 

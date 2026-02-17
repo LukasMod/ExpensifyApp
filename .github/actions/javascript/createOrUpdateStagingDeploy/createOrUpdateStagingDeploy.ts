@@ -54,8 +54,9 @@ async function run(): Promise<IssuesCreateResponse | void> {
         const previousChecklistData = GithubUtils.getStagingDeployCashData(previousChecklist);
         const currentChecklistData: StagingDeployCashData | undefined = shouldCreateNewDeployChecklist ? undefined : GithubUtils.getStagingDeployCashData(mostRecentChecklist);
 
-        // Find the list of PRs merged between the current checklist and the previous checklist
-        const mergedPRs = await GitUtils.getPullRequestsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST.APP_REPO);
+        // Find the list of PRs merged between the current checklist and the previous checklist (in merge order)
+        const mergedPRsChronological = await GitUtils.getPullRequestsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST.APP_REPO);
+        const mergedPRs = [...mergedPRsChronological].sort((a, b) => a - b);
 
         // mergedPRs includes cherry-picked PRs that have already been released with previous checklist, so we need to filter these out
         const previousPRNumbers = new Set(previousChecklistData.PRList.map((pr) => pr.number));
@@ -75,6 +76,18 @@ async function run(): Promise<IssuesCreateResponse | void> {
         }
         core.endGroup();
         console.info(`[api] Checklist PRs: ${newPRNumbers.join(', ')}`);
+
+        // Build the chronological merge order section from the unsorted PR list
+        const chronologicalPRNumbers = mergedPRsChronological.filter((prNum) => !previousPRNumbers.has(prNum));
+        let chronologicalSection = '';
+        if (chronologicalPRNumbers.length > 0) {
+            chronologicalSection += '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
+            chronologicalPRNumbers.forEach((prNum, index) => {
+                const url = GithubUtils.getPullRequestURLFromNumber(prNum, CONST.APP_REPO_URL);
+                chronologicalSection += `${index + 1}. ${url}\r\n`;
+            });
+            chronologicalSection += '\r\n</details>';
+        }
 
         // Get merged Mobile-Expensify PRs
         let mergedMobileExpensifyPRs: number[] = [];
@@ -116,6 +129,7 @@ async function run(): Promise<IssuesCreateResponse | void> {
                 [], // resolvedInternalQAPRs
                 false, // isFirebaseChecked
                 false, // isGHStatusChecked
+                chronologicalSection,
             );
             if (stagingDeployCashBodyAndAssignees) {
                 checklistBody = stagingDeployCashBodyAndAssignees.issueBody;
@@ -192,6 +206,7 @@ async function run(): Promise<IssuesCreateResponse | void> {
                 currentChecklistData?.internalQAPRList.filter((pr) => pr.isResolved).map((pr) => pr.url),
                 didVersionChange ? false : currentChecklistData.isFirebaseChecked,
                 didVersionChange ? false : currentChecklistData.isGHStatusChecked,
+                chronologicalSection,
             );
             if (stagingDeployCashBodyAndAssignees) {
                 checklistBody = stagingDeployCashBodyAndAssignees.issueBody;
