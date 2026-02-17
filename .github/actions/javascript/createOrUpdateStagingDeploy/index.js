@@ -11706,7 +11706,7 @@ async function run() {
                 ...defaultPayload,
                 title: `Deploy Checklist: New Expensify ${(0, format_1.format)(new Date(), CONST_1.default.DATE_FORMAT_STRING)}`,
                 labels: [CONST_1.default.LABELS.STAGING_DEPLOY, CONST_1.default.LABELS.LOCK_DEPLOY],
-                assignees: [CONST_1.default.APPLAUSE_BOT].concat(checklistAssignees),
+                assignees: checklistAssignees,
             });
             console.log(`Successfully created new StagingDeployCash! 🎉 ${newChecklist.html_url}`);
             return newChecklist;
