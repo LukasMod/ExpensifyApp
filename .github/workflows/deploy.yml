@@ -40,9 +40,12 @@ jobs:
           git tag ${{ steps.getTagName.outputs.TAG }}
           git push origin --tags
 
-        # cd Mobile-Expensify
-        # git tag ${{ steps.getTagName.outputs.TAG }}
-        # git push origin --tags
+          cd Mobile-Expensify
+          git config --unset-all http.https://github.com/.extraheader || true
+          git config --unset-all credential.helper || true
+          git remote set-url origin https://${{ secrets.ME_PAT }}@github.com/LukasMod/Mobile-Expensify.git
+          git tag ${{ steps.getTagName.outputs.TAG }}
+          git push origin --tags
 
         # We use JS here instead of bash/jq because inlining potentially large json into a bash command is non-trivial.
         # JS is better at handling JSON: https://stackoverflow.com/questions/72953526/github-actions-how-to-pass-tojson-result-to-shell-commands
