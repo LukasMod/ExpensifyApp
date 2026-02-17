@@ -1,4 +1,4 @@
-// Auto-generated change #1 (2026-02-17 11:56:57)
+// Auto-generated change #3 (2026-02-17 11:57:07)
 // PR PR-4744 - Auto-generated change (2026-02-17 10:28:09)
 import HybridAppModule from '@expensify/react-native-hybrid-app';
 import * as Sentry from '@sentry/react-native';
