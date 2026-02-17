@@ -1,0 +1,68 @@
+name: Deploy code to staging or production
+
+on:
+  push:
+    branches: [staging, production]
+
+env:
+  IS_APP_REPO: ${{ github.repository == 'LukasMod/ExpensifyApp' }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    outputs:
+      APP_VERSION: ${{ steps.getAppVersion.outputs.VERSION }}
+      TAG: ${{ steps.getTagName.outputs.TAG }}
+      # Is this deploy for a cherry-pick?
+      IS_CHERRY_PICK: ${{ steps.isCherryPick.outputs.IS_CHERRY_PICK }}
+    steps:
+      - name: Checkout
+        # v4
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608
+        with:
+          token: ${{ github.token }}
+          submodules: true
+
+      - name: Get app version
+        id: getAppVersion
+        run: echo "VERSION=$(jq -r .version < package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Get tag
+        id: getTagName
+        run: echo "TAG=${{ github.ref == 'refs/heads/production' && steps.getAppVersion.outputs.VERSION || format('{0}-staging', steps.getAppVersion.outputs.VERSION) }}" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        run: |
+          git tag ${{ steps.getTagName.outputs.TAG }}
+          git push origin --tags
+
+        # cd Mobile-Expensify
+        # git tag ${{ steps.getTagName.outputs.TAG }}
+        # git push origin --tags
+
+        # We use JS here instead of bash/jq because inlining potentially large json into a bash command is non-trivial.
+        # JS is better at handling JSON: https://stackoverflow.com/questions/72953526/github-actions-how-to-pass-tojson-result-to-shell-commands
+      - name: Check if this deploy was triggered by a cherry-pick
+        id: isCherryPick
+        uses: actions/github-script@e7aeb8c663f696059ebb5f9ab1425ed2ef511bdb
+        with:
+          script: |
+            const commitMessages = context.payload.commits.map((commit) => commit.message);
+            const isCherryPick = commitMessages.some((message) => /.*\(cherry-picked to .* by .*\)$/.test(message));
+            console.log('Is cherry pick?', isCherryPick);
+            core.setOutput(
+                'IS_CHERRY_PICK',
+                isCherryPick,
+            );
+
+  # Note: we're updating the checklist before running the deploys and assuming that it will succeed on at least one platform
+  deployChecklist:
+    name: Create or update deploy checklist
+    uses: ./.github/workflows/createDeployChecklist.yml
+    if: ${{ github.ref == 'refs/heads/staging' }}
+    needs: prep
+    secrets: inherit
