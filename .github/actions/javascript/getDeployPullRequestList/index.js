@@ -11967,7 +11967,7 @@ function getValidMergedPRs(commits) {
 async function getPullRequestsDeployedBetween(fromTag, toTag, repositoryName) {
     console.log(`Looking for commits made between ${fromTag} and ${toTag}...`);
     const apiCommitList = await GithubUtils_1.default.getCommitHistoryBetweenTags(fromTag, toTag, repositoryName);
-    const apiPullRequestNumbers = getValidMergedPRs(apiCommitList).sort((a, b) => a - b);
+    const apiPullRequestNumbers = getValidMergedPRs(apiCommitList);
     console.log(`Found ${apiCommitList.length} commits.`);
     core.startGroup('Parsed PRs:');
     core.info(apiPullRequestNumbers.join(', '));
@@ -12235,7 +12235,7 @@ class GithubUtils {
     /**
      * Generate the issue body and assignees for a StagingDeployCash.
      */
-    static generateStagingDeployCashBodyAndAssignees(tag, PRList, PRListMobileExpensify, verifiedPRList = [], verifiedPRListMobileExpensify = [], deployBlockers = [], resolvedDeployBlockers = [], resolvedInternalQAPRs = [], isFirebaseChecked = false, isGHStatusChecked = false) {
+    static generateStagingDeployCashBodyAndAssignees(tag, PRList, PRListMobileExpensify, verifiedPRList = [], verifiedPRListMobileExpensify = [], deployBlockers = [], resolvedDeployBlockers = [], resolvedInternalQAPRs = [], isFirebaseChecked = false, isGHStatusChecked = false, chronologicalSection = '') {
         return this.fetchAllPullRequests(PRList.map((pr) => this.getPullRequestNumberFromURL(pr)))
             .then((data) => {
             const internalQAPRs = Array.isArray(data) ? data.filter((pr) => !(0, isEmptyObject_1.isEmptyObject)(pr.labels.find((item) => item.name === CONST_1.default.LABELS.INTERNAL_QA))) : [];
@@ -12304,6 +12304,10 @@ class GithubUtils {
                         issueBody += URL;
                         issueBody += '\r\n';
                     }
+                    issueBody += '\r\n\r\n';
+                }
+                if (chronologicalSection) {
+                    issueBody += chronologicalSection;
                     issueBody += '\r\n\r\n';
                 }
                 issueBody += '**Deployer verifications:**';

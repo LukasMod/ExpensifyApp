@@ -12159,7 +12159,7 @@ class GithubUtils {
     /**
      * Generate the issue body and assignees for a StagingDeployCash.
      */
-    static generateStagingDeployCashBodyAndAssignees(tag, PRList, PRListMobileExpensify, verifiedPRList = [], verifiedPRListMobileExpensify = [], deployBlockers = [], resolvedDeployBlockers = [], resolvedInternalQAPRs = [], isFirebaseChecked = false, isGHStatusChecked = false) {
+    static generateStagingDeployCashBodyAndAssignees(tag, PRList, PRListMobileExpensify, verifiedPRList = [], verifiedPRListMobileExpensify = [], deployBlockers = [], resolvedDeployBlockers = [], resolvedInternalQAPRs = [], isFirebaseChecked = false, isGHStatusChecked = false, chronologicalSection = '') {
         return this.fetchAllPullRequests(PRList.map((pr) => this.getPullRequestNumberFromURL(pr)))
             .then((data) => {
             const internalQAPRs = Array.isArray(data) ? data.filter((pr) => !(0, isEmptyObject_1.isEmptyObject)(pr.labels.find((item) => item.name === CONST_1.default.LABELS.INTERNAL_QA))) : [];
@@ -12228,6 +12228,10 @@ class GithubUtils {
                         issueBody += URL;
                         issueBody += '\r\n';
                     }
+                    issueBody += '\r\n\r\n';
+                }
+                if (chronologicalSection) {
+                    issueBody += chronologicalSection;
                     issueBody += '\r\n\r\n';
                 }
                 issueBody += '**Deployer verifications:**';
@@ -23076,19 +23080,6 @@ class Responses extends resource_1.APIResource {
     cancel(responseID, options) {
         return this._client.post((0, path_1.path) `/responses/${responseID}/cancel`, options);
     }
-    /**
-     * Compact conversation
-     *
-     * @example
-     * ```ts
-     * const compactedResponse = await client.responses.compact({
-     *   model: 'gpt-5.2',
-     * });
-     * ```
-     */
-    compact(body, options) {
-        return this._client.post('/responses/compact', { body, ...options });
-    }
 }
 exports.Responses = Responses;
 Responses.InputItems = input_items_1.InputItems;
@@ -23784,7 +23775,7 @@ tslib_1.__exportStar(__nccwpck_require__(11364), exports);
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.VERSION = void 0;
-exports.VERSION = '6.16.0'; // x-release-please-version
+exports.VERSION = '6.9.1'; // x-release-please-version
 //# sourceMappingURL=version.js.map
 
 /***/ }),
