@@ -1,0 +1,43 @@
+# Reminder: If this workflow's name changes, update the name in the dependent workflow at .github/workflows/failureNotifier.yml.
+name: Process new code merged to main
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: [docs/**, help/**, contributingGuides/**, jest/**, tests/**]
+
+jobs:
+  chooseDeployActions:
+    runs-on: ubuntu-latest
+    outputs:
+      MERGED_PR: ${{ steps.getMergedPullRequest.outputs.number }}
+      SHOULD_DEPLOY: ${{ fromJSON(steps.shouldDeploy.outputs.SHOULD_DEPLOY) }}
+
+    steps:
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+
+      - name: Get merged pull request
+        id: getMergedPullRequest
+        uses: actions-ecosystem/action-get-merged-pull-request@59afe90821bb0b555082ce8ff1e36b03f91553d9
+        with:
+          github_token: ${{ github.token }}
+
+      - name: Check if merged pull request should trigger a deploy
+        id: shouldDeploy
+        run: |
+            echo "SHOULD_DEPLOY=true" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  createNewVersion:
+    needs: chooseDeployActions
+    if: ${{ fromJSON(needs.chooseDeployActions.outputs.SHOULD_DEPLOY) }}
+    uses: ./.github/workflows/createNewVersion.yml
+    secrets: inherit
+
+  updateStaging:
+    needs: [chooseDeployActions, createNewVersion]
+    uses: ./.github/workflows/updateProtectedBranch.yml
+    secrets: inherit
+    with:
+      TARGET_BRANCH: staging
