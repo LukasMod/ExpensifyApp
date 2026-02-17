@@ -50,6 +50,8 @@ jobs:
           cd Mobile-Expensify
           git config user.name "OSBotify"
           git config user.email "osbotify@users.noreply.github.com"
+          # Remove the checkout action's credential header so our PAT takes effect
+          git config --unset-all http.https://github.com/.extraheader || true
           git remote set-url origin https://x-access-token:${{ secrets.ME_PAT }}@github.com/LukasMod/Mobile-Expensify.git
 
       - name: Bump version
