@@ -38,6 +38,10 @@ jobs:
       - name: Update target branch in Mobile-Expensify
         working-directory: Mobile-Expensify
         run: |
+          # Use PAT for Mobile-Expensify push access
+          git config --unset-all http.https://github.com/.extraheader || true
+          git config --unset-all credential.helper || true
+          git remote set-url origin https://${{ secrets.ME_PAT }}@github.com/LukasMod/Mobile-Expensify.git
           # Re-create the target branch from the source branch
           git switch -c ${{ inputs.TARGET_BRANCH }}
           # Force-update the remote target branch.
