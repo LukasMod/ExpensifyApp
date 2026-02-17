@@ -88,16 +88,11 @@ jobs:
           NEW_VERSION="${{ steps.bumpVersion.outputs.NEW_VERSION }}"
           jq --arg v "$NEW_VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
           git add package.json
-          if git diff --cached --quiet; then
-            echo "Mobile-Expensify already at $NEW_VERSION, skipping commit"
-            git checkout main && git pull origin main
-          else
-            git commit -m "Update version to $NEW_VERSION"
-            DETACHED_COMMIT=$(git rev-parse HEAD)
-            git checkout main && git pull origin main
-            git cherry-pick --allow-empty "$DETACHED_COMMIT"
-            git push origin main
-          fi
+          git commit -m "Update version to $NEW_VERSION"
+          DETACHED_COMMIT=$(git rev-parse HEAD)
+          git checkout main && git pull origin main
+          git cherry-pick "$DETACHED_COMMIT"
+          git push origin main
 
       - name: Commit new E/App version
         run: |
