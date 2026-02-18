@@ -86,13 +86,15 @@ jobs:
         working-directory: Mobile-Expensify
         run: |
           NEW_VERSION="${{ steps.bumpVersion.outputs.NEW_VERSION }}"
+          git checkout main && git pull origin main
           jq --arg v "$NEW_VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
           git add package.json
-          git commit -m "Update version to $NEW_VERSION"
-          DETACHED_COMMIT=$(git rev-parse HEAD)
-          git checkout main && git pull origin main
-          git cherry-pick "$DETACHED_COMMIT"
-          git push origin main
+          if git diff --cached --quiet; then
+            echo "Version already up to date on main, nothing to commit"
+          else
+            git commit -m "Update version to $NEW_VERSION"
+            git push origin main
+          fi
 
       - name: Commit new E/App version
         run: |
