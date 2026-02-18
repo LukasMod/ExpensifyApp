@@ -11759,7 +11759,7 @@ function getSubmoduleUpdates(commits) {
             updates.push({
                 version: match[1],
                 date: commit.authorDate,
-                commitSha: commit.commit,
+                commit: commit.commit,
             });
         }
     }

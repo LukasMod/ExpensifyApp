@@ -14,7 +14,7 @@ type MergedPR = {
 type SubmoduleUpdate = {
     version: string;
     date: string;
-    commitSha: string;
+    commit: string;
 };
 
 /**
@@ -93,7 +93,7 @@ function getSubmoduleUpdates(commits: CommitType[]): SubmoduleUpdate[] {
             updates.push({
                 version: match[1],
                 date: commit.authorDate,
-                commitSha: commit.commit,
+                commit: commit.commit,
             });
         }
     }
