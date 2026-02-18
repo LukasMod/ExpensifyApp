@@ -36,7 +36,11 @@ type Arguments = {
 const PATH_TO_PACKAGE_JSON = path.resolve(__dirname, '../../package.json');
 
 const mockListIssues = jest.fn();
-const mockGetPullRequestsDeployedBetween = jest.fn();
+const mockGetMergedPRsDeployedBetween = jest.fn() as jest.MockedFunction<typeof GitUtils.getMergedPRsDeployedBetween>;
+const mockGetPullRequestsDeployedBetween = jest.fn().mockImplementation((...args: Parameters<typeof GitUtils.getMergedPRsDeployedBetween>) => {
+    const result = mockGetMergedPRsDeployedBetween(...args);
+    return Array.isArray(result) ? result.map((pr: {prNumber: number}) => pr.prNumber) : [];
+});
 
 beforeAll(() => {
     // Mock octokit module
@@ -74,6 +78,7 @@ beforeAll(() => {
     GithubUtils.internalOctokit = mockOctokit;
 
     // Mock GitUtils
+    GitUtils.getMergedPRsDeployedBetween = mockGetMergedPRsDeployedBetween;
     GitUtils.getPullRequestsDeployedBetween = mockGetPullRequestsDeployedBetween;
     mockGetInput.mockImplementation((arg) => (arg === 'GITHUB_TOKEN' ? 'fake_token' : ''));
 
@@ -86,6 +91,7 @@ beforeAll(() => {
 afterEach(() => {
     mockGetInput.mockClear();
     mockListIssues.mockClear();
+    mockGetMergedPRsDeployedBetween.mockClear();
     mockGetPullRequestsDeployedBetween.mockClear();
 });
 
@@ -179,6 +185,25 @@ describe('createOrUpdateStagingDeployCash', () => {
 
     const baseNewPullRequests = [6, 7, 8];
 
+    function toMergedPRs(prNumbers: number[]) {
+        return prNumbers.map((num, index) => ({
+            prNumber: num,
+            date: `2024-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`,
+        }));
+    }
+
+    function buildChronologicalSection(prNumbers: number[]): string {
+        if (prNumbers.length === 0) {
+            return '';
+        }
+        let section = '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
+        for (const [index, prNum] of prNumbers.entries()) {
+            section += `${index + 1}. https://github.com/${process.env.GITHUB_REPOSITORY}/pull/${prNum}\r\n`;
+        }
+        section += '\r\n</details>';
+        return section;
+    }
+
     test('creates new issue when there is none open', async () => {
         vol.reset();
         vol.fromJSON({
@@ -186,12 +211,12 @@ describe('createOrUpdateStagingDeployCash', () => {
         });
 
         // cspell:disable-next-line
-        mockGetPullRequestsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
+        mockGetMergedPRsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
             if (fromRef === '1.0.1-0-staging' && toRef === '1.0.2-1-staging') {
                 if (repositoryName === CONST.MOBILE_EXPENSIFY_REPO) {
-                    return [20, 21, 22]; // Mobile-Expensify PRs
+                    return toMergedPRs([20, 21, 22]); // Mobile-Expensify PRs
                 }
-                return [...baseNewPullRequests]; // App PRs
+                return toMergedPRs(baseNewPullRequests); // App PRs
             }
             return [];
         });
@@ -221,6 +246,7 @@ describe('createOrUpdateStagingDeployCash', () => {
                 `${lineBreak}${openCheckbox}${baseMobileExpensifyPRList.at(0)}` +
                 `${lineBreak}${openCheckbox}${baseMobileExpensifyPRList.at(1)}` +
                 `${lineBreak}${openCheckbox}${baseMobileExpensifyPRList.at(2)}${lineBreak}` +
+                `${lineBreakDouble}${buildChronologicalSection(baseNewPullRequests)}` +
                 `${lineBreakDouble}${deployerVerificationsHeader}` +
                 `${lineBreak}${openCheckbox}${firebaseVerificationCurrentRelease}` +
                 `${lineBreak}${openCheckbox}${firebaseVerificationPreviousRelease}` +
@@ -236,12 +262,12 @@ describe('createOrUpdateStagingDeployCash', () => {
         });
 
         // Mock: No Mobile-Expensify PRs found for this release
-        mockGetPullRequestsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
+        mockGetMergedPRsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
             if (fromRef === '1.0.1-0-staging' && toRef === '1.0.2-1-staging') {
                 if (repositoryName === CONST.MOBILE_EXPENSIFY_REPO) {
                     return []; // No Mobile-Expensify PRs
                 }
-                return [...baseNewPullRequests]; // App PRs
+                return toMergedPRs(baseNewPullRequests); // App PRs
             }
             return [];
         });
@@ -268,6 +294,7 @@ describe('createOrUpdateStagingDeployCash', () => {
                 `${lineBreak}${openCheckbox}${basePRList.at(6)}` +
                 `${lineBreak}${openCheckbox}${basePRList.at(7)}${lineBreak}` +
                 // Note: No Mobile-Expensify PRs section since there are none
+                `${lineBreakDouble}${buildChronologicalSection(baseNewPullRequests)}` +
                 `${lineBreakDouble}${deployerVerificationsHeader}` +
                 `${lineBreak}${openCheckbox}${firebaseVerificationCurrentRelease}` +
                 `${lineBreak}${openCheckbox}${firebaseVerificationPreviousRelease}` +
@@ -330,12 +357,12 @@ describe('createOrUpdateStagingDeployCash', () => {
             // New pull requests to add to open StagingDeployCash
             const newPullRequests = [9, 10];
             // cspell:disable-next-line
-            mockGetPullRequestsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
+            mockGetMergedPRsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
                 if (fromRef === '1.0.1-0-staging' && toRef === '1.0.2-2-staging') {
                     if (repositoryName === CONST.MOBILE_EXPENSIFY_REPO) {
-                        return [20, 21, 22, 23, 24]; // Mobile-Expensify PRs
+                        return toMergedPRs([20, 21, 22, 23, 24]); // Mobile-Expensify PRs
                     }
-                    return [...baseNewPullRequests, ...newPullRequests];
+                    return toMergedPRs([...baseNewPullRequests, ...newPullRequests]);
                 }
                 return [];
             });
@@ -395,6 +422,7 @@ describe('createOrUpdateStagingDeployCash', () => {
                     `${lineBreak}${closedCheckbox}${basePRList.at(9)}` +
                     `${lineBreak}${openCheckbox}${baseIssueList.at(0)}` +
                     `${lineBreak}${openCheckbox}${baseIssueList.at(1)}${lineBreak}` +
+                    `${lineBreakDouble}${buildChronologicalSection([...baseNewPullRequests, ...newPullRequests])}` +
                     `${lineBreakDouble}${deployerVerificationsHeader}` +
                     // Note: these will be unchecked with a new app version, and that's intentional
                     `${lineBreak}${openCheckbox}${firebaseVerificationCurrentRelease}` +
@@ -410,12 +438,12 @@ describe('createOrUpdateStagingDeployCash', () => {
                 [PATH_TO_PACKAGE_JSON]: JSON.stringify({version: '1.0.2-1'}),
             });
             // cspell:disable-next-line
-            mockGetPullRequestsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
+            mockGetMergedPRsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
                 if (fromRef === '1.0.1-0-staging' && toRef === '1.0.2-1-staging') {
                     if (repositoryName === CONST.MOBILE_EXPENSIFY_REPO) {
-                        return [20, 21, 22]; // Mobile-Expensify PRs
+                        return toMergedPRs([20, 21, 22]); // Mobile-Expensify PRs
                     }
-                    return [...baseNewPullRequests];
+                    return toMergedPRs(baseNewPullRequests);
                 }
                 return [];
             });
@@ -471,6 +499,7 @@ describe('createOrUpdateStagingDeployCash', () => {
                     `${lineBreak}${closedCheckbox}${basePRList.at(9)}` +
                     `${lineBreak}${openCheckbox}${baseIssueList.at(0)}` +
                     `${lineBreak}${openCheckbox}${baseIssueList.at(1)}${lineBreak}` +
+                    `${lineBreakDouble}${buildChronologicalSection(baseNewPullRequests)}` +
                     `${lineBreakDouble}${deployerVerificationsHeader}` +
                     `${lineBreak}${closedCheckbox}${firebaseVerificationCurrentRelease}` +
                     `${lineBreak}${closedCheckbox}${firebaseVerificationPreviousRelease}` +
@@ -486,12 +515,12 @@ describe('createOrUpdateStagingDeployCash', () => {
             });
 
             // Mock: No Mobile-Expensify PRs found for this release
-            mockGetPullRequestsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
+            mockGetMergedPRsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
                 if (fromRef === '1.0.1-0-staging' && toRef === '1.0.2-1-staging') {
                     if (repositoryName === CONST.MOBILE_EXPENSIFY_REPO) {
                         return []; // No Mobile-Expensify PRs
                     }
-                    return [...baseNewPullRequests];
+                    return toMergedPRs(baseNewPullRequests);
                 }
                 return [];
             });
@@ -525,6 +554,7 @@ describe('createOrUpdateStagingDeployCash', () => {
                     `${lineBreak}${openCheckbox}${basePRList.at(5)}` +
                     `${lineBreak}${openCheckbox}${basePRList.at(8)}` +
                     `${lineBreak}${closedCheckbox}${basePRList.at(9)}${lineBreak}` +
+                    `${lineBreakDouble}${buildChronologicalSection(baseNewPullRequests)}` +
                     `${lineBreakDouble}${deployerVerificationsHeader}` +
                     `${lineBreak}${closedCheckbox}${firebaseVerificationCurrentRelease}` +
                     `${lineBreak}${closedCheckbox}${firebaseVerificationPreviousRelease}` +
@@ -543,12 +573,12 @@ describe('createOrUpdateStagingDeployCash', () => {
 
             mockGetInput.mockImplementation((arg) => (arg === 'GITHUB_TOKEN' ? 'fake_token' : ''));
             // cspell:disable-next-line
-            mockGetPullRequestsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
+            mockGetMergedPRsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
                 if (fromRef === '1.0.2-1-staging' && toRef === '1.0.3-0-staging') {
                     if (repositoryName === CONST.MOBILE_EXPENSIFY_REPO) {
-                        return [20, 22, 24, 25]; // Mobile-Expensify PRs
+                        return toMergedPRs([20, 22, 24, 25]); // Mobile-Expensify PRs
                     }
-                    return [6, 8, 10, 11]; // App PRs
+                    return toMergedPRs([6, 8, 10, 11]); // App PRs
                 }
                 return [];
             });
@@ -612,12 +642,12 @@ describe('createOrUpdateStagingDeployCash', () => {
 
             mockGetInput.mockImplementation((arg) => (arg === 'GITHUB_TOKEN' ? 'fake_token' : ''));
             // Mock: no Mobile-Expensify PRs found
-            mockGetPullRequestsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
+            mockGetMergedPRsDeployedBetween.mockImplementation((fromRef, toRef, repositoryName) => {
                 if (fromRef === '1.0.2-1-staging' && toRef === '1.0.3-0-staging') {
                     if (repositoryName === CONST.MOBILE_EXPENSIFY_REPO) {
                         return []; // No Mobile-Expensify PRs
                     }
-                    return [6, 8, 10, 11]; // App PRs
+                    return toMergedPRs([6, 8, 10, 11]); // App PRs
                 }
                 return [];
             });

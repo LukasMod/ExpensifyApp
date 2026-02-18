@@ -2,13 +2,13 @@ import * as core from '@actions/core';
 import {execSync} from 'child_process';
 import CONST from './CONST';
 import GithubUtils from './GithubUtils';
+import type {CommitType} from './GithubUtils';
 import {getPreviousVersion} from './versionUpdater';
 import type {SemverLevel} from './versionUpdater';
 
-type CommitType = {
-    commit: string;
-    subject: string;
-    authorName: string;
+type MergedPR = {
+    prNumber: number;
+    date: string;
 };
 
 /**
@@ -77,8 +77,8 @@ function getPreviousExistingTag(tag: string, level: SemverLevel) {
 /**
  * Parse merged PRs, excluding those from irrelevant branches.
  */
-function getValidMergedPRs(commits: CommitType[]): number[] {
-    const mergedPRs = new Set<number>();
+function getValidMergedPRs(commits: CommitType[]): MergedPR[] {
+    const mergedPRs = new Map<number, string>();
     for (const commit of commits) {
         const author = commit.authorName;
         if (author === CONST.OS_BOTIFY) {
@@ -99,31 +99,45 @@ function getValidMergedPRs(commits: CommitType[]): number[] {
             continue;
         }
 
-        mergedPRs.add(pr);
+        mergedPRs.set(pr, commit.authorDate);
     }
 
-    return Array.from(mergedPRs);
+    return Array.from(mergedPRs.entries()).map(([prNumber, date]) => ({prNumber, date}));
 }
 
 /**
- * Takes in two git tags and returns a list of PR numbers of all PRs merged between those two tags
+ * Takes in two git tags and returns a list of merged PRs entries between those two tags.
+ * Returns PRs in the order they appear in the commit history from the GitHub API.
  */
-async function getPullRequestsDeployedBetween(fromTag: string, toTag: string, repositoryName: string) {
+async function getMergedPRsDeployedBetween(fromTag: string, toTag: string, repositoryName: string): Promise<MergedPR[]> {
     console.log(`Looking for commits made between ${fromTag} and ${toTag}...`);
     const apiCommitList = await GithubUtils.getCommitHistoryBetweenTags(fromTag, toTag, repositoryName);
-    const apiPullRequestNumbers = getValidMergedPRs(apiCommitList);
+    
+    // Temporary for developing, dont delete this
+    console.log('TEST apiCommitList', JSON.stringify(apiCommitList, null, 2));
+    
+    const mergedPRs = getValidMergedPRs(apiCommitList);
 
     console.log(`Found ${apiCommitList.length} commits.`);
     core.startGroup('Parsed PRs:');
-    core.info(apiPullRequestNumbers.join(', '));
+    core.info(mergedPRs.map((pr) => pr.prNumber).join(', '));
     core.endGroup();
 
-    return apiPullRequestNumbers;
+    return mergedPRs;
+}
+
+/**
+ * Takes in two git tags and returns a list of PR numbers of all PRs merged between those two tags.
+ */
+async function getPullRequestsDeployedBetween(fromTag: string, toTag: string, repositoryName: string): Promise<number[]> {
+    const mergedPRs = await getMergedPRsDeployedBetween(fromTag, toTag, repositoryName);
+    return mergedPRs.map((pr) => pr.prNumber);
 }
 
 export default {
     getPreviousExistingTag,
     getValidMergedPRs,
     getPullRequestsDeployedBetween,
+    getMergedPRsDeployedBetween,
 };
-export type {CommitType};
+export type {CommitType, MergedPR};

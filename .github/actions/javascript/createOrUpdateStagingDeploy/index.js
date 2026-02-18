@@ -11578,9 +11578,9 @@ async function run() {
         // Parse the data from the previous and current checklists into the format used to generate the checklist
         const previousChecklistData = GithubUtils_1.default.getStagingDeployCashData(previousChecklist);
         const currentChecklistData = shouldCreateNewDeployChecklist ? undefined : GithubUtils_1.default.getStagingDeployCashData(mostRecentChecklist);
-        // Find the list of PRs merged between the current checklist and the previous checklist (in merge order)
-        const mergedPRsChronological = await GitUtils_1.default.getPullRequestsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST_1.default.APP_REPO);
-        const mergedPRs = [...mergedPRsChronological].sort((a, b) => a - b);
+        // Find the list of PRs merged between the current checklist and the previous checklist
+        const mergedPREntries = await GitUtils_1.default.getMergedPRsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST_1.default.APP_REPO);
+        const mergedPRs = mergedPREntries.map((pr) => pr.prNumber).sort((a, b) => a - b);
         // mergedPRs includes cherry-picked PRs that have already been released with previous checklist, so we need to filter these out
         const previousPRNumbers = new Set(previousChecklistData.PRList.map((pr) => pr.number));
         const previousMobileExpensifyPRNumbers = new Set(previousChecklistData.PRListMobileExpensify.map((pr) => pr.number));
@@ -11598,17 +11598,6 @@ async function run() {
         }
         core.endGroup();
         console.info(`[api] Checklist PRs: ${newPRNumbers.join(', ')}`);
-        // Build the chronological merge order section from the unsorted PR list
-        const chronologicalPRNumbers = mergedPRsChronological.filter((prNum) => !previousPRNumbers.has(prNum));
-        let chronologicalSection = '';
-        if (chronologicalPRNumbers.length > 0) {
-            chronologicalSection += '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
-            chronologicalPRNumbers.forEach((prNum, index) => {
-                const url = GithubUtils_1.default.getPullRequestURLFromNumber(prNum, CONST_1.default.APP_REPO_URL);
-                chronologicalSection += `${index + 1}. ${url}\r\n`;
-            });
-            chronologicalSection += '\r\n</details>';
-        }
         // Get merged Mobile-Expensify PRs
         let mergedMobileExpensifyPRs = [];
         try {
@@ -11631,18 +11620,26 @@ async function run() {
                 console.error('Failed to fetch Mobile-Expensify PRs:', error);
             }
         }
+        const chronologicalPREntries = mergedPREntries.filter((pr) => !previousPRNumbers.has(pr.prNumber)).sort((a, b) => a.date.localeCompare(b.date));
+        let chronologicalSection = '';
+        if (chronologicalPREntries.length > 0) {
+            chronologicalSection += '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
+            for (const [index, pr] of chronologicalPREntries.entries()) {
+                const url = GithubUtils_1.default.getPullRequestURLFromNumber(pr.prNumber, CONST_1.default.APP_REPO_URL);
+                chronologicalSection += `${index + 1}. ${url}\r\n`;
+            }
+            chronologicalSection += '\r\n</details>';
+        }
         // Next, we generate the checklist body
         let checklistBody = '';
         let checklistAssignees = [];
         if (shouldCreateNewDeployChecklist) {
-            const stagingDeployCashBodyAndAssignees = await GithubUtils_1.default.generateStagingDeployCashBodyAndAssignees(newVersion, newPRNumbers.map((value) => GithubUtils_1.default.getPullRequestURLFromNumber(value, CONST_1.default.APP_REPO_URL)), mergedMobileExpensifyPRs.map((value) => GithubUtils_1.default.getPullRequestURLFromNumber(value, CONST_1.default.MOBILE_EXPENSIFY_URL)), [], // verifiedPRList
-            [], // verifiedPRListMobileExpensify
-            [], // deployBlockers
-            [], // resolvedDeployBlockers
-            [], // resolvedInternalQAPRs
-            false, // isFirebaseChecked
-            false, // isGHStatusChecked
-            chronologicalSection);
+            const stagingDeployCashBodyAndAssignees = await GithubUtils_1.default.generateStagingDeployCashBodyAndAssignees({
+                tag: newVersion,
+                PRList: newPRNumbers.map((value) => GithubUtils_1.default.getPullRequestURLFromNumber(value, CONST_1.default.APP_REPO_URL)),
+                PRListMobileExpensify: mergedMobileExpensifyPRs.map((value) => GithubUtils_1.default.getPullRequestURLFromNumber(value, CONST_1.default.MOBILE_EXPENSIFY_URL)),
+                chronologicalSection,
+            });
             if (stagingDeployCashBodyAndAssignees) {
                 checklistBody = stagingDeployCashBodyAndAssignees.issueBody;
                 checklistAssignees = stagingDeployCashBodyAndAssignees.issueAssignees.filter(Boolean);
@@ -11702,7 +11699,19 @@ async function run() {
                 }
             }
             const didVersionChange = newVersion !== currentChecklistData?.version;
-            const stagingDeployCashBodyAndAssignees = await GithubUtils_1.default.generateStagingDeployCashBodyAndAssignees(newVersion, PRList.map((pr) => pr.url), PRListMobileExpensify.map((pr) => pr.url), PRList.filter((pr) => pr.isVerified).map((pr) => pr.url), PRListMobileExpensify.filter((pr) => pr.isVerified).map((pr) => pr.url), deployBlockers.map((blocker) => blocker.url), deployBlockers.filter((blocker) => blocker.isResolved).map((blocker) => blocker.url), currentChecklistData?.internalQAPRList.filter((pr) => pr.isResolved).map((pr) => pr.url), didVersionChange ? false : currentChecklistData.isFirebaseChecked, didVersionChange ? false : currentChecklistData.isGHStatusChecked, chronologicalSection);
+            const stagingDeployCashBodyAndAssignees = await GithubUtils_1.default.generateStagingDeployCashBodyAndAssignees({
+                tag: newVersion,
+                PRList: PRList.map((pr) => pr.url),
+                PRListMobileExpensify: PRListMobileExpensify.map((pr) => pr.url),
+                verifiedPRList: PRList.filter((pr) => pr.isVerified).map((pr) => pr.url),
+                verifiedPRListMobileExpensify: PRListMobileExpensify.filter((pr) => pr.isVerified).map((pr) => pr.url),
+                deployBlockers: deployBlockers.map((blocker) => blocker.url),
+                resolvedDeployBlockers: deployBlockers.filter((blocker) => blocker.isResolved).map((blocker) => blocker.url),
+                resolvedInternalQAPRs: currentChecklistData?.internalQAPRList.filter((pr) => pr.isResolved).map((pr) => pr.url),
+                isFirebaseChecked: didVersionChange ? false : currentChecklistData.isFirebaseChecked,
+                isGHStatusChecked: didVersionChange ? false : currentChecklistData.isGHStatusChecked,
+                chronologicalSection,
+            });
             if (stagingDeployCashBodyAndAssignees) {
                 checklistBody = stagingDeployCashBodyAndAssignees.issueBody;
                 checklistAssignees = stagingDeployCashBodyAndAssignees.issueAssignees.filter(Boolean);
@@ -11719,7 +11728,7 @@ async function run() {
                 ...defaultPayload,
                 title: `Deploy Checklist: New Expensify ${(0, format_1.format)(new Date(), CONST_1.default.DATE_FORMAT_STRING)}`,
                 labels: [CONST_1.default.LABELS.STAGING_DEPLOY, CONST_1.default.LABELS.LOCK_DEPLOY],
-                assignees: checklistAssignees,
+                assignees: [CONST_1.default.APPLAUSE_BOT].concat(checklistAssignees),
             });
             console.log(`Successfully created new StagingDeployCash! 🎉 ${newChecklist.html_url}`);
             return newChecklist;
@@ -11933,7 +11942,7 @@ function getPreviousExistingTag(tag, level) {
  * Parse merged PRs, excluding those from irrelevant branches.
  */
 function getValidMergedPRs(commits) {
-    const mergedPRs = new Set();
+    const mergedPRs = new Map();
     for (const commit of commits) {
         const author = commit.authorName;
         if (author === CONST_1.default.OS_BOTIFY) {
@@ -11951,27 +11960,38 @@ function getValidMergedPRs(commits) {
             mergedPRs.delete(pr);
             continue;
         }
-        mergedPRs.add(pr);
+        mergedPRs.set(pr, commit.authorDate);
     }
-    return Array.from(mergedPRs);
+    return Array.from(mergedPRs.entries()).map(([prNumber, date]) => ({ prNumber, date }));
 }
 /**
- * Takes in two git tags and returns a list of PR numbers of all PRs merged between those two tags
+ * Takes in two git tags and returns a list of merged PRs entries between those two tags.
+ * Returns PRs in the order they appear in the commit history from the GitHub API.
  */
-async function getPullRequestsDeployedBetween(fromTag, toTag, repositoryName) {
+async function getMergedPRsDeployedBetween(fromTag, toTag, repositoryName) {
     console.log(`Looking for commits made between ${fromTag} and ${toTag}...`);
     const apiCommitList = await GithubUtils_1.default.getCommitHistoryBetweenTags(fromTag, toTag, repositoryName);
-    const apiPullRequestNumbers = getValidMergedPRs(apiCommitList);
+    // Temporary for developing, dont delete this
+    console.log('TEST apiCommitList', JSON.stringify(apiCommitList, null, 2));
+    const mergedPRs = getValidMergedPRs(apiCommitList);
     console.log(`Found ${apiCommitList.length} commits.`);
     core.startGroup('Parsed PRs:');
-    core.info(apiPullRequestNumbers.join(', '));
+    core.info(mergedPRs.map((pr) => pr.prNumber).join(', '));
     core.endGroup();
-    return apiPullRequestNumbers;
+    return mergedPRs;
+}
+/**
+ * Takes in two git tags and returns a list of PR numbers of all PRs merged between those two tags.
+ */
+async function getPullRequestsDeployedBetween(fromTag, toTag, repositoryName) {
+    const mergedPRs = await getMergedPRsDeployedBetween(fromTag, toTag, repositoryName);
+    return mergedPRs.map((pr) => pr.prNumber);
 }
 exports["default"] = {
     getPreviousExistingTag,
     getValidMergedPRs,
     getPullRequestsDeployedBetween,
+    getMergedPRsDeployedBetween,
 };
 
 
@@ -12229,7 +12249,7 @@ class GithubUtils {
     /**
      * Generate the issue body and assignees for a StagingDeployCash.
      */
-    static generateStagingDeployCashBodyAndAssignees(tag, PRList, PRListMobileExpensify, verifiedPRList = [], verifiedPRListMobileExpensify = [], deployBlockers = [], resolvedDeployBlockers = [], resolvedInternalQAPRs = [], isFirebaseChecked = false, isGHStatusChecked = false, chronologicalSection = '') {
+    static generateStagingDeployCashBodyAndAssignees({ tag, PRList, PRListMobileExpensify = [], verifiedPRList = [], verifiedPRListMobileExpensify = [], deployBlockers = [], resolvedDeployBlockers = [], resolvedInternalQAPRs = [], isFirebaseChecked = false, isGHStatusChecked = false, chronologicalSection = '', }) {
         return this.fetchAllPullRequests(PRList.map((pr) => this.getPullRequestNumberFromURL(pr)))
             .then((data) => {
             const internalQAPRs = Array.isArray(data) ? data.filter((pr) => !(0, isEmptyObject_1.isEmptyObject)(pr.labels.find((item) => item.name === CONST_1.default.LABELS.INTERNAL_QA))) : [];
@@ -12576,6 +12596,7 @@ class GithubUtils {
                 commit: commit.sha,
                 subject: commit.commit.message,
                 authorName: commit.commit.author?.name ?? 'Unknown',
+                authorDate: commit.commit.author?.date ?? '',
             }));
         }
         catch (error) {

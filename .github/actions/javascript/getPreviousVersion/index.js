@@ -11750,7 +11750,7 @@ function getPreviousExistingTag(tag, level) {
  * Parse merged PRs, excluding those from irrelevant branches.
  */
 function getValidMergedPRs(commits) {
-    const mergedPRs = new Set();
+    const mergedPRs = new Map();
     for (const commit of commits) {
         const author = commit.authorName;
         if (author === CONST_1.default.OS_BOTIFY) {
@@ -11768,27 +11768,38 @@ function getValidMergedPRs(commits) {
             mergedPRs.delete(pr);
             continue;
         }
-        mergedPRs.add(pr);
+        mergedPRs.set(pr, commit.authorDate);
     }
-    return Array.from(mergedPRs);
+    return Array.from(mergedPRs.entries()).map(([prNumber, date]) => ({ prNumber, date }));
 }
 /**
- * Takes in two git tags and returns a list of PR numbers of all PRs merged between those two tags
+ * Takes in two git tags and returns a list of merged PRs entries between those two tags.
+ * Returns PRs in the order they appear in the commit history from the GitHub API.
  */
-async function getPullRequestsDeployedBetween(fromTag, toTag, repositoryName) {
+async function getMergedPRsDeployedBetween(fromTag, toTag, repositoryName) {
     console.log(`Looking for commits made between ${fromTag} and ${toTag}...`);
     const apiCommitList = await GithubUtils_1.default.getCommitHistoryBetweenTags(fromTag, toTag, repositoryName);
-    const apiPullRequestNumbers = getValidMergedPRs(apiCommitList);
+    // Temporary for developing, dont delete this
+    console.log('TEST apiCommitList', JSON.stringify(apiCommitList, null, 2));
+    const mergedPRs = getValidMergedPRs(apiCommitList);
     console.log(`Found ${apiCommitList.length} commits.`);
     core.startGroup('Parsed PRs:');
-    core.info(apiPullRequestNumbers.join(', '));
+    core.info(mergedPRs.map((pr) => pr.prNumber).join(', '));
     core.endGroup();
-    return apiPullRequestNumbers;
+    return mergedPRs;
+}
+/**
+ * Takes in two git tags and returns a list of PR numbers of all PRs merged between those two tags.
+ */
+async function getPullRequestsDeployedBetween(fromTag, toTag, repositoryName) {
+    const mergedPRs = await getMergedPRsDeployedBetween(fromTag, toTag, repositoryName);
+    return mergedPRs.map((pr) => pr.prNumber);
 }
 exports["default"] = {
     getPreviousExistingTag,
     getValidMergedPRs,
     getPullRequestsDeployedBetween,
+    getMergedPRsDeployedBetween,
 };
 
 
@@ -12046,7 +12057,7 @@ class GithubUtils {
     /**
      * Generate the issue body and assignees for a StagingDeployCash.
      */
-    static generateStagingDeployCashBodyAndAssignees(tag, PRList, PRListMobileExpensify, verifiedPRList = [], verifiedPRListMobileExpensify = [], deployBlockers = [], resolvedDeployBlockers = [], resolvedInternalQAPRs = [], isFirebaseChecked = false, isGHStatusChecked = false, chronologicalSection = '') {
+    static generateStagingDeployCashBodyAndAssignees({ tag, PRList, PRListMobileExpensify = [], verifiedPRList = [], verifiedPRListMobileExpensify = [], deployBlockers = [], resolvedDeployBlockers = [], resolvedInternalQAPRs = [], isFirebaseChecked = false, isGHStatusChecked = false, chronologicalSection = '', }) {
         return this.fetchAllPullRequests(PRList.map((pr) => this.getPullRequestNumberFromURL(pr)))
             .then((data) => {
             const internalQAPRs = Array.isArray(data) ? data.filter((pr) => !(0, isEmptyObject_1.isEmptyObject)(pr.labels.find((item) => item.name === CONST_1.default.LABELS.INTERNAL_QA))) : [];
@@ -12393,6 +12404,7 @@ class GithubUtils {
                 commit: commit.sha,
                 subject: commit.commit.message,
                 authorName: commit.commit.author?.name ?? 'Unknown',
+                authorDate: commit.commit.author?.date ?? '',
             }));
         }
         catch (error) {
