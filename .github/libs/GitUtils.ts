@@ -112,10 +112,7 @@ function getValidMergedPRs(commits: CommitType[]): MergedPR[] {
 async function getMergedPRsDeployedBetween(fromTag: string, toTag: string, repositoryName: string): Promise<MergedPR[]> {
     console.log(`Looking for commits made between ${fromTag} and ${toTag}...`);
     const apiCommitList = await GithubUtils.getCommitHistoryBetweenTags(fromTag, toTag, repositoryName);
-    
-    // Temporary for developing, dont delete this
-    console.log('TEST apiCommitList', JSON.stringify(apiCommitList, null, 2));
-    
+        
     const mergedPRs = getValidMergedPRs(apiCommitList);
 
     console.log(`Found ${apiCommitList.length} commits.`);
