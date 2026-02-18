@@ -46,10 +46,14 @@ async function buildChronologicalSection({
     // A Mobile-Expensify PR is assigned to the first submodule bump whose date >= PR merge date,
     // because merging to Mobile-Expensify doesn't matter until the submodule is actually bumped in App.
     const sortedSubmoduleUpdates = [...submoduleUpdates].sort((a, b) => a.date.localeCompare(b.date));
+    console.log('[DEBUG] sortedSubmoduleUpdates:', JSON.stringify(sortedSubmoduleUpdates.map((u) => ({version: u.version, date: u.date, commitSha: u.commitSha?.substring(0, 7), commit: (u as any).commit?.substring(0, 7)})), null, 2));
+    console.log('[DEBUG] mergedMobileExpensifyPREntries:', JSON.stringify(mergedMobileExpensifyPREntries.map((pr) => ({prNumber: pr.prNumber, date: pr.date})), null, 2));
+
     const mobileExpensifyPRsBySubmodule = new Map<string, MergedPR[]>();
     const mobileExpensifyPRsPendingSubmoduleUpdate: MergedPR[] = [];
     for (const mobileExpensifyPR of mergedMobileExpensifyPREntries) {
         const matchingUpdate = sortedSubmoduleUpdates.find((update) => update.date.localeCompare(mobileExpensifyPR.date) >= 0);
+        console.log(`[DEBUG] ME PR #${mobileExpensifyPR.prNumber} (date: ${mobileExpensifyPR.date}) -> matched submodule: ${matchingUpdate ? `${matchingUpdate.version} (date: ${matchingUpdate.date})` : 'NONE (pending)'}`);
         if (matchingUpdate) {
             const existing = mobileExpensifyPRsBySubmodule.get(matchingUpdate.commit) ?? [];
             existing.push(mobileExpensifyPR);
@@ -57,6 +61,11 @@ async function buildChronologicalSection({
         } else {
             mobileExpensifyPRsPendingSubmoduleUpdate.push(mobileExpensifyPR);
         }
+    }
+
+    console.log('[DEBUG] mobileExpensifyPRsBySubmodule:');
+    for (const [commit, prs] of mobileExpensifyPRsBySubmodule.entries()) {
+        console.log(`[DEBUG]   commit ${commit.substring(0, 7)}: PRs [${prs.map((pr) => `#${pr.prNumber}`).join(', ')}]`);
     }
 
     // Merge PRs and submodule updates into a single chronological timeline
