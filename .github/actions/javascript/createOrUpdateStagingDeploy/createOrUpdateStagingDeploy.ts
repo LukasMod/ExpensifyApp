@@ -5,12 +5,100 @@ import CONST from '@github/libs/CONST';
 import GithubUtils from '@github/libs/GithubUtils';
 import type {StagingDeployCashData} from '@github/libs/GithubUtils';
 import GitUtils from '@github/libs/GitUtils';
+import type {MergedPR, SubmoduleUpdate} from '@github/libs/GitUtils';
 
 type IssuesCreateResponse = Awaited<ReturnType<typeof GithubUtils.octokit.issues.create>>['data'];
 
 type PackageJson = {
     version: string;
 };
+
+type TimelineEntry = {type: 'pr'; prNumber: number; date: string} | {type: 'submodule'; version: string; date: string; commitSha: string};
+
+async function buildChronologicalSection({
+    chronologicalPREntries,
+    submoduleUpdates,
+    mergedMobileExpensifyPREntries,
+}: {
+    chronologicalPREntries: MergedPR[];
+    submoduleUpdates: SubmoduleUpdate[];
+    mergedMobileExpensifyPREntries: MergedPR[];
+}): Promise<string> {
+    if (chronologicalPREntries.length === 0) {
+        return '';
+    }
+
+    // Look up workflow run URLs for each submodule update commit
+    const submoduleRunURLs = new Map<string, string | undefined>();
+    const results = await Promise.allSettled(
+        submoduleUpdates.map(async (update) => {
+            const runURL = await GithubUtils.getWorkflowRunURLForCommit(update.commitSha, 'testBuildOnPush.yml');
+            return {commitSha: update.commitSha, runURL};
+        }),
+    );
+    for (const result of results) {
+        if (result.status === 'fulfilled') {
+            submoduleRunURLs.set(result.value.commitSha, result.value.runURL);
+        }
+    }
+
+    // Group Mobile-Expensify PRs by the submodule update that introduced them.
+    // A Mobile-Expensify PR is assigned to the first submodule bump whose date >= PR merge date,
+    // because merging to Mobile-Expensify doesn't matter until the submodule is actually bumped in App.
+    const sortedSubmoduleUpdates = [...submoduleUpdates].sort((a, b) => a.date.localeCompare(b.date));
+    const mobileExpensifyPRsBySubmodule = new Map<string, MergedPR[]>();
+    const mobileExpensifyPRsPendingSubmoduleUpdate: MergedPR[] = [];
+    for (const mobileExpensifyPR of mergedMobileExpensifyPREntries) {
+        const matchingUpdate = sortedSubmoduleUpdates.find((update) => update.date.localeCompare(mobileExpensifyPR.date) >= 0);
+        if (matchingUpdate) {
+            const existing = mobileExpensifyPRsBySubmodule.get(matchingUpdate.commitSha) ?? [];
+            existing.push(mobileExpensifyPR);
+            mobileExpensifyPRsBySubmodule.set(matchingUpdate.commitSha, existing);
+        } else {
+            mobileExpensifyPRsPendingSubmoduleUpdate.push(mobileExpensifyPR);
+        }
+    }
+
+    // Merge PRs and submodule updates into a single chronological timeline
+    const timeline: TimelineEntry[] = [
+        ...chronologicalPREntries.map((pr): TimelineEntry => ({type: 'pr', prNumber: pr.prNumber, date: pr.date})),
+        ...submoduleUpdates.map((update): TimelineEntry => ({type: 'submodule', version: update.version, date: update.date, commitSha: update.commitSha})),
+    ].sort((a, b) => a.date.localeCompare(b.date));
+
+    let section = '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
+    let prIndex = 0;
+    for (const entry of timeline) {
+        if (entry.type === 'submodule') {
+            prIndex++;
+            const runURL = submoduleRunURLs.get(entry.commitSha);
+            const buildLink = runURL ? ` — [Adhoc Build](${runURL})` : ` — ${entry.commitSha.substring(0, 7)}`;
+            section += `${prIndex}. Mobile-Expensify submodule update to \`${entry.version}\`${buildLink}\r\n`;
+            const mobileExpensifyPRs = mobileExpensifyPRsBySubmodule.get(entry.commitSha);
+            if (mobileExpensifyPRs) {
+                const sortedMobileExpensifyPRs = [...mobileExpensifyPRs].sort((a, b) => a.date.localeCompare(b.date));
+                for (const mobileExpensifyPR of sortedMobileExpensifyPRs) {
+                    prIndex++;
+                    const mobileExpensifyUrl = GithubUtils.getPullRequestURLFromNumber(mobileExpensifyPR.prNumber, CONST.MOBILE_EXPENSIFY_URL);
+                    section += `${prIndex}. ${mobileExpensifyUrl}\r\n`;
+                }
+            }
+        } else {
+            prIndex++;
+            const url = GithubUtils.getPullRequestURLFromNumber(entry.prNumber, CONST.APP_REPO_URL);
+            section += `${prIndex}. ${url}\r\n`;
+        }
+    }
+    if (mobileExpensifyPRsPendingSubmoduleUpdate.length > 0) {
+        const sortedPending = [...mobileExpensifyPRsPendingSubmoduleUpdate].sort((a, b) => a.date.localeCompare(b.date));
+        section += `\r\n--- PRs waiting for Mobile-Expensify submodule update\r\n`;
+        for (const mobileExpensifyPR of sortedPending) {
+            const mobileExpensifyUrl = GithubUtils.getPullRequestURLFromNumber(mobileExpensifyPR.prNumber, CONST.MOBILE_EXPENSIFY_URL);
+            section += `${mobileExpensifyUrl}\r\n`;
+        }
+    }
+    section += '\r\n</details>';
+    return section;
+}
 
 async function run(): Promise<IssuesCreateResponse | void> {
     // Note: require('package.json').version does not work because ncc will resolve that to a plain string at compile time
@@ -79,7 +167,7 @@ async function run(): Promise<IssuesCreateResponse | void> {
 
         // Get merged Mobile-Expensify PRs (with dates for chronological grouping by submodule update)
         let mergedMobileExpensifyPRs: number[] = [];
-        let mergedMobileExpensifyPREntries: Array<{prNumber: number; date: string}> = [];
+        let mergedMobileExpensifyPREntries: MergedPR[] = [];
         try {
             const {mergedPRs: allMobileExpensifyPREntries} = await GitUtils.getMergedPRsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST.MOBILE_EXPENSIFY_REPO);
             const allMobileExpensifyPRs = allMobileExpensifyPREntries.map((pr) => pr.prNumber);
@@ -106,66 +194,11 @@ async function run(): Promise<IssuesCreateResponse | void> {
         }
 
         const chronologicalPREntries = mergedPREntries.filter((pr) => !previousPRNumbers.has(pr.prNumber)).sort((a, b) => a.date.localeCompare(b.date));
-        let chronologicalSection = '';
-        if (chronologicalPREntries.length > 0) {
-            // Look up workflow run URLs for each submodule update commit
-            const submoduleRunURLs = new Map<string, string | undefined>();
-            await Promise.all(
-                submoduleUpdates.map(async (update) => {
-                    const runURL = await GithubUtils.getWorkflowRunURLForCommit(update.commitSha, 'testBuildOnPush.yml');
-                    submoduleRunURLs.set(update.commitSha, runURL);
-                }),
-            );
-
-            // Group Mobile-Expensify PRs by the submodule update that introduced them.
-            // A ME PR is assigned to the first submodule bump whose date >= PR merge date,
-            // because merging to ME doesn't matter until the submodule is actually bumped in App.
-            const sortedSubmoduleUpdates = [...submoduleUpdates].sort((a, b) => a.date.localeCompare(b.date));
-            type MePREntry = {prNumber: number; date: string};
-            const mePRsBySubmodule = new Map<string, MePREntry[]>();
-            for (const mePR of mergedMobileExpensifyPREntries) {
-                const matchingUpdate = sortedSubmoduleUpdates.find((update) => update.date.localeCompare(mePR.date) >= 0);
-                if (matchingUpdate) {
-                    const existing = mePRsBySubmodule.get(matchingUpdate.commitSha) ?? [];
-                    existing.push(mePR);
-                    mePRsBySubmodule.set(matchingUpdate.commitSha, existing);
-                }
-            }
-
-            // Merge PRs and submodule updates into a single chronological timeline
-            type TimelineEntry =
-                | {type: 'pr'; prNumber: number; date: string}
-                | {type: 'submodule'; version: string; date: string; commitSha: string};
-
-            const timeline: TimelineEntry[] = [
-                ...chronologicalPREntries.map((pr): TimelineEntry => ({type: 'pr', prNumber: pr.prNumber, date: pr.date})),
-                ...submoduleUpdates.map((update): TimelineEntry => ({type: 'submodule', version: update.version, date: update.date, commitSha: update.commitSha})),
-            ].sort((a, b) => a.date.localeCompare(b.date));
-
-            chronologicalSection += '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
-            let prIndex = 0;
-            for (const entry of timeline) {
-                if (entry.type === 'submodule') {
-                    prIndex++;
-                    const runURL = submoduleRunURLs.get(entry.commitSha);
-                    const buildLink = runURL ? ` — [Test Build](${runURL})` : ` — ${entry.commitSha.substring(0, 7)}`;
-                    chronologicalSection += `${prIndex}. --- Mobile-Expensify submodule update to \`${entry.version}\`${buildLink}\r\n`;
-                    const mePRs = mePRsBySubmodule.get(entry.commitSha);
-                    if (mePRs) {
-                        const sortedMePRs = [...mePRs].sort((a, b) => a.date.localeCompare(b.date));
-                        for (const mePR of sortedMePRs) {
-                            const meUrl = GithubUtils.getPullRequestURLFromNumber(mePR.prNumber, CONST.MOBILE_EXPENSIFY_URL);
-                            chronologicalSection += `${meUrl}\r\n`;
-                        }
-                    }
-                } else {
-                    prIndex++;
-                    const url = GithubUtils.getPullRequestURLFromNumber(entry.prNumber, CONST.APP_REPO_URL);
-                    chronologicalSection += `${prIndex}. ${url}\r\n`;
-                }
-            }
-            chronologicalSection += '\r\n</details>';
-        }
+        const chronologicalSection = await buildChronologicalSection({
+            chronologicalPREntries,
+            submoduleUpdates,
+            mergedMobileExpensifyPREntries,
+        });
 
         // Next, we generate the checklist body
         let checklistBody = '';
@@ -272,7 +305,7 @@ async function run(): Promise<IssuesCreateResponse | void> {
                 ...defaultPayload,
                 title: `Deploy Checklist: New Expensify ${format(new Date(), CONST.DATE_FORMAT_STRING)}`,
                 labels: [CONST.LABELS.STAGING_DEPLOY, CONST.LABELS.LOCK_DEPLOY],
-                assignees: checklistAssignees,
+                assignees: [CONST.APPLAUSE_BOT as string].concat(checklistAssignees),
             });
             console.log(`Successfully created new StagingDeployCash! 🎉 ${newChecklist.html_url}`);
             return newChecklist;

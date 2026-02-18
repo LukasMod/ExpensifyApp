@@ -11542,6 +11542,78 @@ const fs_1 = __importDefault(__nccwpck_require__(7147));
 const CONST_1 = __importDefault(__nccwpck_require__(9873));
 const GithubUtils_1 = __importDefault(__nccwpck_require__(9296));
 const GitUtils_1 = __importDefault(__nccwpck_require__(1547));
+async function buildChronologicalSection({ chronologicalPREntries, submoduleUpdates, mergedMobileExpensifyPREntries, }) {
+    if (chronologicalPREntries.length === 0) {
+        return '';
+    }
+    // Look up workflow run URLs for each submodule update commit
+    const submoduleRunURLs = new Map();
+    const results = await Promise.allSettled(submoduleUpdates.map(async (update) => {
+        const runURL = await GithubUtils_1.default.getWorkflowRunURLForCommit(update.commitSha, 'testBuildOnPush.yml');
+        return { commitSha: update.commitSha, runURL };
+    }));
+    for (const result of results) {
+        if (result.status === 'fulfilled') {
+            submoduleRunURLs.set(result.value.commitSha, result.value.runURL);
+        }
+    }
+    // Group Mobile-Expensify PRs by the submodule update that introduced them.
+    // A Mobile-Expensify PR is assigned to the first submodule bump whose date >= PR merge date,
+    // because merging to Mobile-Expensify doesn't matter until the submodule is actually bumped in App.
+    const sortedSubmoduleUpdates = [...submoduleUpdates].sort((a, b) => a.date.localeCompare(b.date));
+    const mobileExpensifyPRsBySubmodule = new Map();
+    const mobileExpensifyPRsPendingSubmoduleUpdate = [];
+    for (const mobileExpensifyPR of mergedMobileExpensifyPREntries) {
+        const matchingUpdate = sortedSubmoduleUpdates.find((update) => update.date.localeCompare(mobileExpensifyPR.date) >= 0);
+        if (matchingUpdate) {
+            const existing = mobileExpensifyPRsBySubmodule.get(matchingUpdate.commitSha) ?? [];
+            existing.push(mobileExpensifyPR);
+            mobileExpensifyPRsBySubmodule.set(matchingUpdate.commitSha, existing);
+        }
+        else {
+            mobileExpensifyPRsPendingSubmoduleUpdate.push(mobileExpensifyPR);
+        }
+    }
+    // Merge PRs and submodule updates into a single chronological timeline
+    const timeline = [
+        ...chronologicalPREntries.map((pr) => ({ type: 'pr', prNumber: pr.prNumber, date: pr.date })),
+        ...submoduleUpdates.map((update) => ({ type: 'submodule', version: update.version, date: update.date, commitSha: update.commitSha })),
+    ].sort((a, b) => a.date.localeCompare(b.date));
+    let section = '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
+    let prIndex = 0;
+    for (const entry of timeline) {
+        if (entry.type === 'submodule') {
+            prIndex++;
+            const runURL = submoduleRunURLs.get(entry.commitSha);
+            const buildLink = runURL ? ` — [Adhoc Build](${runURL})` : ` — ${entry.commitSha.substring(0, 7)}`;
+            section += `${prIndex}. Mobile-Expensify submodule update to \`${entry.version}\`${buildLink}\r\n`;
+            const mobileExpensifyPRs = mobileExpensifyPRsBySubmodule.get(entry.commitSha);
+            if (mobileExpensifyPRs) {
+                const sortedMobileExpensifyPRs = [...mobileExpensifyPRs].sort((a, b) => a.date.localeCompare(b.date));
+                for (const mobileExpensifyPR of sortedMobileExpensifyPRs) {
+                    prIndex++;
+                    const mobileExpensifyUrl = GithubUtils_1.default.getPullRequestURLFromNumber(mobileExpensifyPR.prNumber, CONST_1.default.MOBILE_EXPENSIFY_URL);
+                    section += `${prIndex}. ${mobileExpensifyUrl}\r\n`;
+                }
+            }
+        }
+        else {
+            prIndex++;
+            const url = GithubUtils_1.default.getPullRequestURLFromNumber(entry.prNumber, CONST_1.default.APP_REPO_URL);
+            section += `${prIndex}. ${url}\r\n`;
+        }
+    }
+    if (mobileExpensifyPRsPendingSubmoduleUpdate.length > 0) {
+        const sortedPending = [...mobileExpensifyPRsPendingSubmoduleUpdate].sort((a, b) => a.date.localeCompare(b.date));
+        section += `\r\n--- PRs waiting for Mobile-Expensify submodule update\r\n`;
+        for (const mobileExpensifyPR of sortedPending) {
+            const mobileExpensifyUrl = GithubUtils_1.default.getPullRequestURLFromNumber(mobileExpensifyPR.prNumber, CONST_1.default.MOBILE_EXPENSIFY_URL);
+            section += `${mobileExpensifyUrl}\r\n`;
+        }
+    }
+    section += '\r\n</details>';
+    return section;
+}
 async function run() {
     // Note: require('package.json').version does not work because ncc will resolve that to a plain string at compile time
     const packageJson = JSON.parse(fs_1.default.readFileSync('package.json', 'utf8'));
@@ -11624,56 +11696,11 @@ async function run() {
             }
         }
         const chronologicalPREntries = mergedPREntries.filter((pr) => !previousPRNumbers.has(pr.prNumber)).sort((a, b) => a.date.localeCompare(b.date));
-        let chronologicalSection = '';
-        if (chronologicalPREntries.length > 0) {
-            // Look up workflow run URLs for each submodule update commit
-            const submoduleRunURLs = new Map();
-            await Promise.all(submoduleUpdates.map(async (update) => {
-                const runURL = await GithubUtils_1.default.getWorkflowRunURLForCommit(update.commitSha, 'testBuildOnPush.yml');
-                submoduleRunURLs.set(update.commitSha, runURL);
-            }));
-            // Group Mobile-Expensify PRs by the submodule update that introduced them.
-            // A ME PR is assigned to the first submodule bump whose date >= PR merge date,
-            // because merging to ME doesn't matter until the submodule is actually bumped in App.
-            const sortedSubmoduleUpdates = [...submoduleUpdates].sort((a, b) => a.date.localeCompare(b.date));
-            const mePRsBySubmodule = new Map();
-            for (const mePR of mergedMobileExpensifyPREntries) {
-                const matchingUpdate = sortedSubmoduleUpdates.find((update) => update.date.localeCompare(mePR.date) >= 0);
-                if (matchingUpdate) {
-                    const existing = mePRsBySubmodule.get(matchingUpdate.commitSha) ?? [];
-                    existing.push(mePR);
-                    mePRsBySubmodule.set(matchingUpdate.commitSha, existing);
-                }
-            }
-            const timeline = [
-                ...chronologicalPREntries.map((pr) => ({ type: 'pr', prNumber: pr.prNumber, date: pr.date })),
-                ...submoduleUpdates.map((update) => ({ type: 'submodule', version: update.version, date: update.date, commitSha: update.commitSha })),
-            ].sort((a, b) => a.date.localeCompare(b.date));
-            chronologicalSection += '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
-            let prIndex = 0;
-            for (const entry of timeline) {
-                if (entry.type === 'submodule') {
-                    prIndex++;
-                    const runURL = submoduleRunURLs.get(entry.commitSha);
-                    const buildLink = runURL ? ` — [Test Build](${runURL})` : ` — ${entry.commitSha.substring(0, 7)}`;
-                    chronologicalSection += `${prIndex}. --- Mobile-Expensify submodule update to \`${entry.version}\`${buildLink}\r\n`;
-                    const mePRs = mePRsBySubmodule.get(entry.commitSha);
-                    if (mePRs) {
-                        const sortedMePRs = [...mePRs].sort((a, b) => a.date.localeCompare(b.date));
-                        for (const mePR of sortedMePRs) {
-                            const meUrl = GithubUtils_1.default.getPullRequestURLFromNumber(mePR.prNumber, CONST_1.default.MOBILE_EXPENSIFY_URL);
-                            chronologicalSection += `${meUrl}\r\n`;
-                        }
-                    }
-                }
-                else {
-                    prIndex++;
-                    const url = GithubUtils_1.default.getPullRequestURLFromNumber(entry.prNumber, CONST_1.default.APP_REPO_URL);
-                    chronologicalSection += `${prIndex}. ${url}\r\n`;
-                }
-            }
-            chronologicalSection += '\r\n</details>';
-        }
+        const chronologicalSection = await buildChronologicalSection({
+            chronologicalPREntries,
+            submoduleUpdates,
+            mergedMobileExpensifyPREntries,
+        });
         // Next, we generate the checklist body
         let checklistBody = '';
         let checklistAssignees = [];
@@ -11772,7 +11799,7 @@ async function run() {
                 ...defaultPayload,
                 title: `Deploy Checklist: New Expensify ${(0, format_1.format)(new Date(), CONST_1.default.DATE_FORMAT_STRING)}`,
                 labels: [CONST_1.default.LABELS.STAGING_DEPLOY, CONST_1.default.LABELS.LOCK_DEPLOY],
-                assignees: checklistAssignees,
+                assignees: [CONST_1.default.APPLAUSE_BOT].concat(checklistAssignees),
             });
             console.log(`Successfully created new StagingDeployCash! 🎉 ${newChecklist.html_url}`);
             return newChecklist;
@@ -11983,13 +12010,14 @@ function getPreviousExistingTag(tag, level) {
     return previousVersion;
 }
 /**
- * Extract Mobile-Expensify submodule version update commits from the commit history.
- * These are commits by OSBotify with messages like "Update Mobile-Expensify submodule version to 9.3.21-0".
+ * Extract Mobile-Expensify submodule update commits from the commit history.
+ * Matches both version-based ("Update Mobile-Expensify submodule version to 9.3.21-0")
+ * and hash-based ("Update Mobile-Expensify submodule to 9f18fca") patterns.
  */
 function getSubmoduleUpdates(commits) {
     const updates = [];
     for (const commit of commits) {
-        const match = commit.subject.match(/^Update Mobile-Expensify submodule version to (.+)$/);
+        const match = commit.subject.match(/^Update Mobile-Expensify submodule (?:version )?to (.+)$/);
         if (match) {
             updates.push({
                 version: match[1],
@@ -12057,6 +12085,7 @@ async function getPullRequestsDeployedBetween(fromTag, toTag, repositoryName) {
 exports["default"] = {
     getPreviousExistingTag,
     getValidMergedPRs,
+    getSubmoduleUpdates,
     getPullRequestsDeployedBetween,
     getMergedPRsDeployedBetween,
 };

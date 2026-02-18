@@ -11936,13 +11936,14 @@ function getPreviousExistingTag(tag, level) {
     return previousVersion;
 }
 /**
- * Extract Mobile-Expensify submodule version update commits from the commit history.
- * These are commits by OSBotify with messages like "Update Mobile-Expensify submodule version to 9.3.21-0".
+ * Extract Mobile-Expensify submodule update commits from the commit history.
+ * Matches both version-based ("Update Mobile-Expensify submodule version to 9.3.21-0")
+ * and hash-based ("Update Mobile-Expensify submodule to 9f18fca") patterns.
  */
 function getSubmoduleUpdates(commits) {
     const updates = [];
     for (const commit of commits) {
-        const match = commit.subject.match(/^Update Mobile-Expensify submodule version to (.+)$/);
+        const match = commit.subject.match(/^Update Mobile-Expensify submodule (?:version )?to (.+)$/);
         if (match) {
             updates.push({
                 version: match[1],
@@ -12010,6 +12011,7 @@ async function getPullRequestsDeployedBetween(fromTag, toTag, repositoryName) {
 exports["default"] = {
     getPreviousExistingTag,
     getValidMergedPRs,
+    getSubmoduleUpdates,
     getPullRequestsDeployedBetween,
     getMergedPRsDeployedBetween,
 };
