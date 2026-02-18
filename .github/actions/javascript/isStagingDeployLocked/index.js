@@ -12081,6 +12081,26 @@ class GithubUtils {
         });
     }
     /**
+     * Get the workflow run URL for a specific commit SHA and workflow file.
+     * Returns the HTML URL of the matching run, or undefined if not found.
+     */
+    static async getWorkflowRunURLForCommit(commitSha, workflowFile) {
+        try {
+            const response = await this.octokit.actions.listWorkflowRuns({
+                owner: CONST_1.default.GITHUB_OWNER,
+                repo: CONST_1.default.APP_REPO,
+                workflow_id: workflowFile,
+                head_sha: commitSha,
+                per_page: 1,
+            });
+            return response.data.workflow_runs.at(0)?.html_url;
+        }
+        catch (error) {
+            console.warn(`Failed to find workflow run for commit ${commitSha}:`, error);
+            return undefined;
+        }
+    }
+    /**
      * Generate the URL of an New Expensify pull request given the PR number.
      */
     static getPullRequestURLFromNumber(value, repositoryURL) {
@@ -12233,8 +12253,6 @@ class GithubUtils {
             core.info(`🎉 Successfully fetched ${allCommits.length} total commits`);
             core.endGroup();
             console.log('');
-            // Temporary for developing, dont delete this
-            console.log('TEST allCommits', JSON.stringify(allCommits, null, 2));
             return allCommits.map((commit) => ({
                 commit: commit.sha,
                 subject: commit.commit.message,

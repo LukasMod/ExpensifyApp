@@ -11579,7 +11579,7 @@ async function run() {
         const previousChecklistData = GithubUtils_1.default.getStagingDeployCashData(previousChecklist);
         const currentChecklistData = shouldCreateNewDeployChecklist ? undefined : GithubUtils_1.default.getStagingDeployCashData(mostRecentChecklist);
         // Find the list of PRs merged between the current checklist and the previous checklist
-        const mergedPREntries = await GitUtils_1.default.getMergedPRsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST_1.default.APP_REPO);
+        const { mergedPRs: mergedPREntries, submoduleUpdates } = await GitUtils_1.default.getMergedPRsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST_1.default.APP_REPO);
         const mergedPRs = mergedPREntries.map((pr) => pr.prNumber).sort((a, b) => a - b);
         // mergedPRs includes cherry-picked PRs that have already been released with previous checklist, so we need to filter these out
         const previousPRNumbers = new Set(previousChecklistData.PRList.map((pr) => pr.number));
@@ -11623,10 +11623,29 @@ async function run() {
         const chronologicalPREntries = mergedPREntries.filter((pr) => !previousPRNumbers.has(pr.prNumber)).sort((a, b) => a.date.localeCompare(b.date));
         let chronologicalSection = '';
         if (chronologicalPREntries.length > 0) {
+            // Look up workflow run URLs for each submodule update commit
+            const submoduleRunURLs = new Map();
+            await Promise.all(submoduleUpdates.map(async (update) => {
+                const runURL = await GithubUtils_1.default.getWorkflowRunURLForCommit(update.commitSha, 'testBuildOnPush.yml');
+                submoduleRunURLs.set(update.commitSha, runURL);
+            }));
+            const timeline = [
+                ...chronologicalPREntries.map((pr) => ({ type: 'pr', prNumber: pr.prNumber, date: pr.date })),
+                ...submoduleUpdates.map((update) => ({ type: 'submodule', version: update.version, date: update.date, commitSha: update.commitSha })),
+            ].sort((a, b) => a.date.localeCompare(b.date));
             chronologicalSection += '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
-            for (const [index, pr] of chronologicalPREntries.entries()) {
-                const url = GithubUtils_1.default.getPullRequestURLFromNumber(pr.prNumber, CONST_1.default.APP_REPO_URL);
-                chronologicalSection += `${index + 1}. ${url}\r\n`;
+            let prIndex = 0;
+            for (const entry of timeline) {
+                if (entry.type === 'submodule') {
+                    const runURL = submoduleRunURLs.get(entry.commitSha);
+                    const buildLink = runURL ? ` — [Test Build](${runURL})` : '';
+                    chronologicalSection += `\r\n---\r\n**📦 Mobile-Expensify submodule bumped to \`${entry.version}\`**${buildLink}\r\n---\r\n\r\n`;
+                }
+                else {
+                    prIndex++;
+                    const url = GithubUtils_1.default.getPullRequestURLFromNumber(entry.prNumber, CONST_1.default.APP_REPO_URL);
+                    chronologicalSection += `${prIndex}. ${url}\r\n`;
+                }
             }
             chronologicalSection += '\r\n</details>';
         }
@@ -11728,7 +11747,7 @@ async function run() {
                 ...defaultPayload,
                 title: `Deploy Checklist: New Expensify ${(0, format_1.format)(new Date(), CONST_1.default.DATE_FORMAT_STRING)}`,
                 labels: [CONST_1.default.LABELS.STAGING_DEPLOY, CONST_1.default.LABELS.LOCK_DEPLOY],
-                assignees: [CONST_1.default.APPLAUSE_BOT].concat(checklistAssignees),
+                assignees: checklistAssignees,
             });
             console.log(`Successfully created new StagingDeployCash! 🎉 ${newChecklist.html_url}`);
             return newChecklist;
@@ -11939,6 +11958,24 @@ function getPreviousExistingTag(tag, level) {
     return previousVersion;
 }
 /**
+ * Extract Mobile-Expensify submodule version update commits from the commit history.
+ * These are commits by OSBotify with messages like "Update Mobile-Expensify submodule version to 9.3.21-0".
+ */
+function getSubmoduleUpdates(commits) {
+    const updates = [];
+    for (const commit of commits) {
+        const match = commit.subject.match(/^Update Mobile-Expensify submodule version to (.+)$/);
+        if (match) {
+            updates.push({
+                version: match[1],
+                date: commit.authorDate,
+                commitSha: commit.commit,
+            });
+        }
+    }
+    return updates;
+}
+/**
  * Parse merged PRs, excluding those from irrelevant branches.
  */
 function getValidMergedPRs(commits) {
@@ -11965,24 +12002,31 @@ function getValidMergedPRs(commits) {
     return Array.from(mergedPRs.entries()).map(([prNumber, date]) => ({ prNumber, date }));
 }
 /**
- * Takes in two git tags and returns a list of merged PRs entries between those two tags.
+ * Takes in two git tags and returns a list of merged PRs entries between those two tags,
+ * along with any Mobile-Expensify submodule version updates found in the commit history.
  * Returns PRs in the order they appear in the commit history from the GitHub API.
  */
 async function getMergedPRsDeployedBetween(fromTag, toTag, repositoryName) {
     console.log(`Looking for commits made between ${fromTag} and ${toTag}...`);
     const apiCommitList = await GithubUtils_1.default.getCommitHistoryBetweenTags(fromTag, toTag, repositoryName);
     const mergedPRs = getValidMergedPRs(apiCommitList);
+    const submoduleUpdates = getSubmoduleUpdates(apiCommitList);
     console.log(`Found ${apiCommitList.length} commits.`);
     core.startGroup('Parsed PRs:');
     core.info(mergedPRs.map((pr) => pr.prNumber).join(', '));
     core.endGroup();
-    return mergedPRs;
+    if (submoduleUpdates.length > 0) {
+        core.startGroup('Submodule updates:');
+        core.info(submoduleUpdates.map((u) => u.version).join(', '));
+        core.endGroup();
+    }
+    return { mergedPRs, submoduleUpdates };
 }
 /**
  * Takes in two git tags and returns a list of PR numbers of all PRs merged between those two tags.
  */
 async function getPullRequestsDeployedBetween(fromTag, toTag, repositoryName) {
-    const mergedPRs = await getMergedPRsDeployedBetween(fromTag, toTag, repositoryName);
+    const { mergedPRs } = await getMergedPRsDeployedBetween(fromTag, toTag, repositoryName);
     return mergedPRs.map((pr) => pr.prNumber);
 }
 exports["default"] = {
@@ -12438,6 +12482,26 @@ class GithubUtils {
         });
     }
     /**
+     * Get the workflow run URL for a specific commit SHA and workflow file.
+     * Returns the HTML URL of the matching run, or undefined if not found.
+     */
+    static async getWorkflowRunURLForCommit(commitSha, workflowFile) {
+        try {
+            const response = await this.octokit.actions.listWorkflowRuns({
+                owner: CONST_1.default.GITHUB_OWNER,
+                repo: CONST_1.default.APP_REPO,
+                workflow_id: workflowFile,
+                head_sha: commitSha,
+                per_page: 1,
+            });
+            return response.data.workflow_runs.at(0)?.html_url;
+        }
+        catch (error) {
+            console.warn(`Failed to find workflow run for commit ${commitSha}:`, error);
+            return undefined;
+        }
+    }
+    /**
      * Generate the URL of an New Expensify pull request given the PR number.
      */
     static getPullRequestURLFromNumber(value, repositoryURL) {
@@ -12590,8 +12654,6 @@ class GithubUtils {
             core.info(`🎉 Successfully fetched ${allCommits.length} total commits`);
             core.endGroup();
             console.log('');
-            // Temporary for developing, dont delete this
-            console.log('TEST allCommits', JSON.stringify(allCommits, null, 2));
             return allCommits.map((commit) => ({
                 commit: commit.sha,
                 subject: commit.commit.message,
