@@ -77,11 +77,14 @@ async function run(): Promise<IssuesCreateResponse | void> {
         core.endGroup();
         console.info(`[api] Checklist PRs: ${newPRNumbers.join(', ')}`);
 
-        // Get merged Mobile-Expensify PRs
+        // Get merged Mobile-Expensify PRs (with dates for chronological grouping by submodule update)
         let mergedMobileExpensifyPRs: number[] = [];
+        let mergedMobileExpensifyPREntries: Array<{prNumber: number; date: string}> = [];
         try {
-            const allMobileExpensifyPRs = await GitUtils.getPullRequestsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST.MOBILE_EXPENSIFY_REPO);
+            const {mergedPRs: allMobileExpensifyPREntries} = await GitUtils.getMergedPRsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST.MOBILE_EXPENSIFY_REPO);
+            const allMobileExpensifyPRs = allMobileExpensifyPREntries.map((pr) => pr.prNumber);
             mergedMobileExpensifyPRs = allMobileExpensifyPRs.filter((prNum) => !previousMobileExpensifyPRNumbers.has(prNum));
+            mergedMobileExpensifyPREntries = allMobileExpensifyPREntries.filter((pr) => !previousMobileExpensifyPRNumbers.has(pr.prNumber));
 
             console.info(`Found ${allMobileExpensifyPRs.length} total Mobile-Expensify PRs, ${mergedMobileExpensifyPRs.length} new ones after filtering:`);
             console.info(`Mobile-Expensify PRs: ${mergedMobileExpensifyPRs.join(', ')}`);
@@ -114,8 +117,25 @@ async function run(): Promise<IssuesCreateResponse | void> {
                 }),
             );
 
+            // Group Mobile-Expensify PRs by the submodule update that introduced them.
+            // A ME PR is assigned to the first submodule bump whose date >= PR merge date,
+            // because merging to ME doesn't matter until the submodule is actually bumped in App.
+            const sortedSubmoduleUpdates = [...submoduleUpdates].sort((a, b) => a.date.localeCompare(b.date));
+            type MePREntry = {prNumber: number; date: string};
+            const mePRsBySubmodule = new Map<string, MePREntry[]>();
+            for (const mePR of mergedMobileExpensifyPREntries) {
+                const matchingUpdate = sortedSubmoduleUpdates.find((update) => update.date.localeCompare(mePR.date) >= 0);
+                if (matchingUpdate) {
+                    const existing = mePRsBySubmodule.get(matchingUpdate.commitSha) ?? [];
+                    existing.push(mePR);
+                    mePRsBySubmodule.set(matchingUpdate.commitSha, existing);
+                }
+            }
+
             // Merge PRs and submodule updates into a single chronological timeline
-            type TimelineEntry = {type: 'pr'; prNumber: number; date: string} | {type: 'submodule'; version: string; date: string; commitSha: string};
+            type TimelineEntry =
+                | {type: 'pr'; prNumber: number; date: string}
+                | {type: 'submodule'; version: string; date: string; commitSha: string};
 
             const timeline: TimelineEntry[] = [
                 ...chronologicalPREntries.map((pr): TimelineEntry => ({type: 'pr', prNumber: pr.prNumber, date: pr.date})),
@@ -129,6 +149,15 @@ async function run(): Promise<IssuesCreateResponse | void> {
                     const runURL = submoduleRunURLs.get(entry.commitSha);
                     const buildLink = runURL ? ` — [Test Build](${runURL})` : ` — ${entry.commitSha.substring(0, 7)}`;
                     chronologicalSection += `--- Mobile-Expensify submodule update to \`${entry.version}\`${buildLink}\r\n`;
+                    // List ME PRs introduced by this submodule bump
+                    const mePRs = mePRsBySubmodule.get(entry.commitSha);
+                    if (mePRs) {
+                        const sortedMePRs = [...mePRs].sort((a, b) => a.date.localeCompare(b.date));
+                        for (const mePR of sortedMePRs) {
+                            const meUrl = GithubUtils.getPullRequestURLFromNumber(mePR.prNumber, CONST.MOBILE_EXPENSIFY_URL);
+                            chronologicalSection += `  - ${meUrl}\r\n`;
+                        }
+                    }
                 } else {
                     prIndex++;
                     const url = GithubUtils.getPullRequestURLFromNumber(entry.prNumber, CONST.APP_REPO_URL);
