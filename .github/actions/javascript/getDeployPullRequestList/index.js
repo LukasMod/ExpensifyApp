@@ -11968,8 +11968,6 @@ function getValidMergedPRs(commits) {
 async function getMergedPRsDeployedBetween(fromTag, toTag, repositoryName) {
     console.log(`Looking for commits made between ${fromTag} and ${toTag}...`);
     const apiCommitList = await GithubUtils_1.default.getCommitHistoryBetweenTags(fromTag, toTag, repositoryName);
-    // Temporary for developing, dont delete this
-    console.log('TEST apiCommitList', JSON.stringify(apiCommitList, null, 2));
     const mergedPRs = getValidMergedPRs(apiCommitList);
     console.log(`Found ${apiCommitList.length} commits.`);
     core.startGroup('Parsed PRs:');
@@ -12589,6 +12587,8 @@ class GithubUtils {
             core.info(`🎉 Successfully fetched ${allCommits.length} total commits`);
             core.endGroup();
             console.log('');
+            // Temporary for developing, dont delete this
+            console.log('TEST allCommits', JSON.stringify(allCommits, null, 2));
             return allCommits.map((commit) => ({
                 commit: commit.sha,
                 subject: commit.commit.message,

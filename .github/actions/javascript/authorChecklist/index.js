@@ -16208,6 +16208,8 @@ class GithubUtils {
             core.info(`🎉 Successfully fetched ${allCommits.length} total commits`);
             core.endGroup();
             console.log('');
+            // Temporary for developing, dont delete this
+            console.log('TEST allCommits', JSON.stringify(allCommits, null, 2));
             return allCommits.map((commit) => ({
                 commit: commit.sha,
                 subject: commit.commit.message,
