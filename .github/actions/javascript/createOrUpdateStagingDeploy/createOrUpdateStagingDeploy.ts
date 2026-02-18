@@ -53,9 +53,11 @@ async function buildChronologicalSection({
     const mobileExpensifyPRsPendingSubmoduleUpdate: MergedPR[] = [];
     for (const mobileExpensifyPR of mergedMobileExpensifyPREntries) {
         const matchingUpdate = sortedSubmoduleUpdates.find((update) => update.date.localeCompare(mobileExpensifyPR.date) >= 0);
-        console.log(`[DEBUG] ME PR #${mobileExpensifyPR.prNumber} (date: ${mobileExpensifyPR.date}) -> matched submodule: ${matchingUpdate ? `${matchingUpdate.version} (date: ${matchingUpdate.date})` : 'NONE (pending)'}`);
+        console.log(`[DEBUG] ME PR #${mobileExpensifyPR.prNumber} (date: ${mobileExpensifyPR.date}) -> matched submodule: ${matchingUpdate ? `${matchingUpdate.version} (date: ${matchingUpdate.date}, commitSha: ${matchingUpdate.commitSha?.substring(0, 7)}, commit: ${(matchingUpdate as any).commit?.substring(0, 7)})` : 'NONE (pending)'}`);
         if (matchingUpdate) {
-            const existing = mobileExpensifyPRsBySubmodule.get(matchingUpdate.commit) ?? [];
+            const mapKey = matchingUpdate.commit;
+            console.log(`[DEBUG]   Map key for this PR: "${mapKey}" (type: ${typeof mapKey})`);
+            const existing = mobileExpensifyPRsBySubmodule.get(mapKey) ?? [];
             existing.push(mobileExpensifyPR);
             mobileExpensifyPRsBySubmodule.set(matchingUpdate.commit, existing);
         } else {
