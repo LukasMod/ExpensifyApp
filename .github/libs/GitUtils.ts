@@ -11,6 +11,12 @@ type MergedPR = {
     date: string;
 };
 
+type SubmoduleUpdate = {
+    version: string;
+    date: string;
+    commitSha: string;
+};
+
 /**
  * Check if a tag exists locally or in the remote.
  */
@@ -75,6 +81,25 @@ function getPreviousExistingTag(tag: string, level: SemverLevel) {
 }
 
 /**
+ * Extract Mobile-Expensify submodule version update commits from the commit history.
+ * These are commits by OSBotify with messages like "Update Mobile-Expensify submodule version to 9.3.21-0".
+ */
+function getSubmoduleUpdates(commits: CommitType[]): SubmoduleUpdate[] {
+    const updates: SubmoduleUpdate[] = [];
+    for (const commit of commits) {
+        const match = commit.subject.match(/^Update Mobile-Expensify submodule version to (.+)$/);
+        if (match) {
+            updates.push({
+                version: match[1],
+                date: commit.authorDate,
+                commitSha: commit.commit,
+            });
+        }
+    }
+    return updates;
+}
+
+/**
  * Parse merged PRs, excluding those from irrelevant branches.
  */
 function getValidMergedPRs(commits: CommitType[]): MergedPR[] {
@@ -105,29 +130,41 @@ function getValidMergedPRs(commits: CommitType[]): MergedPR[] {
     return Array.from(mergedPRs.entries()).map(([prNumber, date]) => ({prNumber, date}));
 }
 
+type MergedPRsResult = {
+    mergedPRs: MergedPR[];
+    submoduleUpdates: SubmoduleUpdate[];
+};
+
 /**
- * Takes in two git tags and returns a list of merged PRs entries between those two tags.
+ * Takes in two git tags and returns a list of merged PRs entries between those two tags,
+ * along with any Mobile-Expensify submodule version updates found in the commit history.
  * Returns PRs in the order they appear in the commit history from the GitHub API.
  */
-async function getMergedPRsDeployedBetween(fromTag: string, toTag: string, repositoryName: string): Promise<MergedPR[]> {
+async function getMergedPRsDeployedBetween(fromTag: string, toTag: string, repositoryName: string): Promise<MergedPRsResult> {
     console.log(`Looking for commits made between ${fromTag} and ${toTag}...`);
     const apiCommitList = await GithubUtils.getCommitHistoryBetweenTags(fromTag, toTag, repositoryName);
-        
     const mergedPRs = getValidMergedPRs(apiCommitList);
+    const submoduleUpdates = getSubmoduleUpdates(apiCommitList);
 
     console.log(`Found ${apiCommitList.length} commits.`);
     core.startGroup('Parsed PRs:');
     core.info(mergedPRs.map((pr) => pr.prNumber).join(', '));
     core.endGroup();
 
-    return mergedPRs;
+    if (submoduleUpdates.length > 0) {
+        core.startGroup('Submodule updates:');
+        core.info(submoduleUpdates.map((u) => u.version).join(', '));
+        core.endGroup();
+    }
+
+    return {mergedPRs, submoduleUpdates};
 }
 
 /**
  * Takes in two git tags and returns a list of PR numbers of all PRs merged between those two tags.
  */
 async function getPullRequestsDeployedBetween(fromTag: string, toTag: string, repositoryName: string): Promise<number[]> {
-    const mergedPRs = await getMergedPRsDeployedBetween(fromTag, toTag, repositoryName);
+    const {mergedPRs} = await getMergedPRsDeployedBetween(fromTag, toTag, repositoryName);
     return mergedPRs.map((pr) => pr.prNumber);
 }
 
@@ -137,4 +174,4 @@ export default {
     getPullRequestsDeployedBetween,
     getMergedPRsDeployedBetween,
 };
-export type {CommitType, MergedPR};
+export type {CommitType, MergedPR, SubmoduleUpdate};

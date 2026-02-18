@@ -55,7 +55,7 @@ async function run(): Promise<IssuesCreateResponse | void> {
         const currentChecklistData: StagingDeployCashData | undefined = shouldCreateNewDeployChecklist ? undefined : GithubUtils.getStagingDeployCashData(mostRecentChecklist);
 
         // Find the list of PRs merged between the current checklist and the previous checklist
-        const mergedPREntries = await GitUtils.getMergedPRsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST.APP_REPO);
+        const {mergedPRs: mergedPREntries, submoduleUpdates} = await GitUtils.getMergedPRsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST.APP_REPO);
         const mergedPRs = mergedPREntries.map((pr) => pr.prNumber).sort((a, b) => a - b);
 
         // mergedPRs includes cherry-picked PRs that have already been released with previous checklist, so we need to filter these out
@@ -105,10 +105,35 @@ async function run(): Promise<IssuesCreateResponse | void> {
         const chronologicalPREntries = mergedPREntries.filter((pr) => !previousPRNumbers.has(pr.prNumber)).sort((a, b) => a.date.localeCompare(b.date));
         let chronologicalSection = '';
         if (chronologicalPREntries.length > 0) {
+            // Look up workflow run URLs for each submodule update commit
+            const submoduleRunURLs = new Map<string, string | undefined>();
+            await Promise.all(
+                submoduleUpdates.map(async (update) => {
+                    const runURL = await GithubUtils.getWorkflowRunURLForCommit(update.commitSha, 'testBuildOnPush.yml');
+                    submoduleRunURLs.set(update.commitSha, runURL);
+                }),
+            );
+
+            // Merge PRs and submodule updates into a single chronological timeline
+            type TimelineEntry = {type: 'pr'; prNumber: number; date: string} | {type: 'submodule'; version: string; date: string; commitSha: string};
+
+            const timeline: TimelineEntry[] = [
+                ...chronologicalPREntries.map((pr): TimelineEntry => ({type: 'pr', prNumber: pr.prNumber, date: pr.date})),
+                ...submoduleUpdates.map((update): TimelineEntry => ({type: 'submodule', version: update.version, date: update.date, commitSha: update.commitSha})),
+            ].sort((a, b) => a.date.localeCompare(b.date));
+
             chronologicalSection += '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
-            for (const [index, pr] of chronologicalPREntries.entries()) {
-                const url = GithubUtils.getPullRequestURLFromNumber(pr.prNumber, CONST.APP_REPO_URL);
-                chronologicalSection += `${index + 1}. ${url}\r\n`;
+            let prIndex = 0;
+            for (const entry of timeline) {
+                if (entry.type === 'submodule') {
+                    const runURL = submoduleRunURLs.get(entry.commitSha);
+                    const buildLink = runURL ? ` — [Test Build](${runURL})` : '';
+                    chronologicalSection += `\r\n---\r\n**📦 Mobile-Expensify submodule bumped to \`${entry.version}\`**${buildLink}\r\n---\r\n\r\n`;
+                } else {
+                    prIndex++;
+                    const url = GithubUtils.getPullRequestURLFromNumber(entry.prNumber, CONST.APP_REPO_URL);
+                    chronologicalSection += `${prIndex}. ${url}\r\n`;
+                }
             }
             chronologicalSection += '\r\n</details>';
         }
@@ -218,7 +243,7 @@ async function run(): Promise<IssuesCreateResponse | void> {
                 ...defaultPayload,
                 title: `Deploy Checklist: New Expensify ${format(new Date(), CONST.DATE_FORMAT_STRING)}`,
                 labels: [CONST.LABELS.STAGING_DEPLOY, CONST.LABELS.LOCK_DEPLOY],
-                assignees: [CONST.APPLAUSE_BOT as string].concat(checklistAssignees),
+                assignees: checklistAssignees,
             });
             console.log(`Successfully created new StagingDeployCash! 🎉 ${newChecklist.html_url}`);
             return newChecklist;
