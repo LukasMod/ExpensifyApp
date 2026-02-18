@@ -11653,16 +11653,16 @@ async function run() {
             let prIndex = 0;
             for (const entry of timeline) {
                 if (entry.type === 'submodule') {
+                    prIndex++;
                     const runURL = submoduleRunURLs.get(entry.commitSha);
                     const buildLink = runURL ? ` — [Test Build](${runURL})` : ` — ${entry.commitSha.substring(0, 7)}`;
-                    chronologicalSection += `--- Mobile-Expensify submodule update to \`${entry.version}\`${buildLink}\r\n`;
-                    // List ME PRs introduced by this submodule bump
+                    chronologicalSection += `${prIndex}. --- Mobile-Expensify submodule update to \`${entry.version}\`${buildLink}\r\n`;
                     const mePRs = mePRsBySubmodule.get(entry.commitSha);
                     if (mePRs) {
                         const sortedMePRs = [...mePRs].sort((a, b) => a.date.localeCompare(b.date));
                         for (const mePR of sortedMePRs) {
                             const meUrl = GithubUtils_1.default.getPullRequestURLFromNumber(mePR.prNumber, CONST_1.default.MOBILE_EXPENSIFY_URL);
-                            chronologicalSection += `  - ${meUrl}\r\n`;
+                            chronologicalSection += `${meUrl}\r\n`;
                         }
                     }
                 }
