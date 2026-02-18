@@ -11638,8 +11638,8 @@ async function run() {
             for (const entry of timeline) {
                 if (entry.type === 'submodule') {
                     const runURL = submoduleRunURLs.get(entry.commitSha);
-                    const buildLink = runURL ? ` — [Test Build](${runURL})` : '';
-                    chronologicalSection += `\r\n---\r\n**📦 Mobile-Expensify submodule bumped to \`${entry.version}\`**${buildLink}\r\n---\r\n\r\n`;
+                    const buildLink = runURL ? ` — [Test Build](${runURL})` : ` — ${entry.commitSha.substring(0, 7)}`;
+                    chronologicalSection += `--- Mobile-Expensify submodule update to \`${entry.version}\`${buildLink}\r\n`;
                 }
                 else {
                     prIndex++;
