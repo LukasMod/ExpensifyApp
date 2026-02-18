@@ -13,7 +13,7 @@ type PackageJson = {
     version: string;
 };
 
-type TimelineEntry = {type: 'pr'; prNumber: number; date: string} | {type: 'submodule'; version: string; date: string; commitSha: string};
+type TimelineEntry = {type: 'pr'; prNumber: number; date: string} | {type: 'submodule'; version: string; date: string; commit: string};
 
 async function buildChronologicalSection({
     chronologicalPREntries,
@@ -24,7 +24,7 @@ async function buildChronologicalSection({
     submoduleUpdates: SubmoduleUpdate[];
     mergedMobileExpensifyPREntries: MergedPR[];
 }): Promise<string> {
-    if (chronologicalPREntries.length === 0) {
+    if (chronologicalPREntries.length === 0 && submoduleUpdates.length === 0 && mergedMobileExpensifyPREntries.length === 0) {
         return '';
     }
 
@@ -32,13 +32,13 @@ async function buildChronologicalSection({
     const submoduleRunURLs = new Map<string, string | undefined>();
     const results = await Promise.allSettled(
         submoduleUpdates.map(async (update) => {
-            const runURL = await GithubUtils.getWorkflowRunURLForCommit(update.commitSha, 'testBuildOnPush.yml');
-            return {commitSha: update.commitSha, runURL};
+            const runURL = await GithubUtils.getWorkflowRunURLForCommit(update.commit, 'testBuildOnPush.yml');
+            return {commit: update.commit, runURL};
         }),
     );
     for (const result of results) {
         if (result.status === 'fulfilled') {
-            submoduleRunURLs.set(result.value.commitSha, result.value.runURL);
+            submoduleRunURLs.set(result.value.commit, result.value.runURL);
         }
     }
 
@@ -51,9 +51,9 @@ async function buildChronologicalSection({
     for (const mobileExpensifyPR of mergedMobileExpensifyPREntries) {
         const matchingUpdate = sortedSubmoduleUpdates.find((update) => update.date.localeCompare(mobileExpensifyPR.date) >= 0);
         if (matchingUpdate) {
-            const existing = mobileExpensifyPRsBySubmodule.get(matchingUpdate.commitSha) ?? [];
+            const existing = mobileExpensifyPRsBySubmodule.get(matchingUpdate.commit) ?? [];
             existing.push(mobileExpensifyPR);
-            mobileExpensifyPRsBySubmodule.set(matchingUpdate.commitSha, existing);
+            mobileExpensifyPRsBySubmodule.set(matchingUpdate.commit, existing);
         } else {
             mobileExpensifyPRsPendingSubmoduleUpdate.push(mobileExpensifyPR);
         }
@@ -62,7 +62,7 @@ async function buildChronologicalSection({
     // Merge PRs and submodule updates into a single chronological timeline
     const timeline: TimelineEntry[] = [
         ...chronologicalPREntries.map((pr): TimelineEntry => ({type: 'pr', prNumber: pr.prNumber, date: pr.date})),
-        ...submoduleUpdates.map((update): TimelineEntry => ({type: 'submodule', version: update.version, date: update.date, commitSha: update.commitSha})),
+        ...submoduleUpdates.map((update): TimelineEntry => ({type: 'submodule', version: update.version, date: update.date, commit: update.commit})),
     ].sort((a, b) => a.date.localeCompare(b.date));
 
     let section = '<details>\r\n<summary><b>Chronologically ordered merged PRs (oldest first)</b></summary>\r\n\r\n';
@@ -70,16 +70,15 @@ async function buildChronologicalSection({
     for (const entry of timeline) {
         if (entry.type === 'submodule') {
             prIndex++;
-            const runURL = submoduleRunURLs.get(entry.commitSha);
-            const buildLink = runURL ? ` — [Adhoc Build](${runURL})` : ` — ${entry.commitSha.substring(0, 7)}`;
+            const runURL = submoduleRunURLs.get(entry.commit);
+            const buildLink = runURL ? ` — [Adhoc Build](${runURL})` : ` — ${entry.commit.substring(0, 7)}`;
             section += `${prIndex}. Mobile-Expensify submodule update to \`${entry.version}\`${buildLink}\r\n`;
-            const mobileExpensifyPRs = mobileExpensifyPRsBySubmodule.get(entry.commitSha);
+            const mobileExpensifyPRs = mobileExpensifyPRsBySubmodule.get(entry.commit);
             if (mobileExpensifyPRs) {
                 const sortedMobileExpensifyPRs = [...mobileExpensifyPRs].sort((a, b) => a.date.localeCompare(b.date));
                 for (const mobileExpensifyPR of sortedMobileExpensifyPRs) {
-                    prIndex++;
                     const mobileExpensifyUrl = GithubUtils.getPullRequestURLFromNumber(mobileExpensifyPR.prNumber, CONST.MOBILE_EXPENSIFY_URL);
-                    section += `${prIndex}. ${mobileExpensifyUrl}\r\n`;
+                    section += `   ↳ ${mobileExpensifyUrl}\r\n`;
                 }
             }
         } else {
@@ -166,21 +165,22 @@ async function run(): Promise<IssuesCreateResponse | void> {
         console.info(`[api] Checklist PRs: ${newPRNumbers.join(', ')}`);
 
         // Get merged Mobile-Expensify PRs (with dates for chronological grouping by submodule update)
-        let mergedMobileExpensifyPRs: number[] = [];
         let mergedMobileExpensifyPREntries: MergedPR[] = [];
         try {
             const {mergedPRs: allMobileExpensifyPREntries} = await GitUtils.getMergedPRsDeployedBetween(previousChecklistData.tag, newStagingTag, CONST.MOBILE_EXPENSIFY_REPO);
-            const allMobileExpensifyPRs = allMobileExpensifyPREntries.map((pr) => pr.prNumber);
-            mergedMobileExpensifyPRs = allMobileExpensifyPRs.filter((prNum) => !previousMobileExpensifyPRNumbers.has(prNum));
             mergedMobileExpensifyPREntries = allMobileExpensifyPREntries.filter((pr) => !previousMobileExpensifyPRNumbers.has(pr.prNumber));
 
-            console.info(`Found ${allMobileExpensifyPRs.length} total Mobile-Expensify PRs, ${mergedMobileExpensifyPRs.length} new ones after filtering:`);
-            console.info(`Mobile-Expensify PRs: ${mergedMobileExpensifyPRs.join(', ')}`);
+            const allCount = allMobileExpensifyPREntries.length;
+            const newCount = mergedMobileExpensifyPREntries.length;
+            console.info(`Found ${allCount} total Mobile-Expensify PRs, ${newCount} new ones after filtering:`);
+            console.info(`Mobile-Expensify PRs: ${mergedMobileExpensifyPREntries.map((pr) => pr.prNumber).join(', ')}`);
 
             // Log the Mobile-Expensify PRs that were filtered out
-            const removedMobileExpensifyPRs = allMobileExpensifyPRs.filter((prNum) => previousMobileExpensifyPRNumbers.has(prNum));
+            const removedMobileExpensifyPRs = allMobileExpensifyPREntries.filter((pr) => previousMobileExpensifyPRNumbers.has(pr.prNumber));
             if (removedMobileExpensifyPRs.length > 0) {
-                core.info(`⚠️⚠️ Filtered out the following cherry-picked Mobile-Expensify PRs that were released with the previous checklist: ${removedMobileExpensifyPRs.join(', ')} ⚠️⚠️`);
+                core.info(
+                    `⚠️⚠️ Filtered out the following cherry-picked Mobile-Expensify PRs that were released with the previous checklist: ${removedMobileExpensifyPRs.map((pr) => pr.prNumber).join(', ')} ⚠️⚠️`,
+                );
             }
         } catch (error) {
             // Check if this is a forked repository
@@ -207,7 +207,7 @@ async function run(): Promise<IssuesCreateResponse | void> {
             const stagingDeployCashBodyAndAssignees = await GithubUtils.generateStagingDeployCashBodyAndAssignees({
                 tag: newVersion,
                 PRList: newPRNumbers.map((value) => GithubUtils.getPullRequestURLFromNumber(value, CONST.APP_REPO_URL)),
-                PRListMobileExpensify: mergedMobileExpensifyPRs.map((value) => GithubUtils.getPullRequestURLFromNumber(value, CONST.MOBILE_EXPENSIFY_URL)),
+                PRListMobileExpensify: mergedMobileExpensifyPREntries.map((pr) => GithubUtils.getPullRequestURLFromNumber(pr.prNumber, CONST.MOBILE_EXPENSIFY_URL)),
                 chronologicalSection,
             });
             if (stagingDeployCashBodyAndAssignees) {
@@ -227,12 +227,12 @@ async function run(): Promise<IssuesCreateResponse | void> {
             });
 
             // Generate the updated Mobile-Expensify PR list, preserving the previous state of `isVerified` for existing PRs
-            const PRListMobileExpensify = mergedMobileExpensifyPRs.map((prNum) => {
-                const indexOfPRInCurrentChecklist = currentChecklistData?.PRListMobileExpensify.findIndex((pr) => pr.number === prNum) ?? -1;
+            const PRListMobileExpensify = mergedMobileExpensifyPREntries.map((entry) => {
+                const indexOfPRInCurrentChecklist = currentChecklistData?.PRListMobileExpensify.findIndex((pr) => pr.number === entry.prNumber) ?? -1;
                 const isVerified = indexOfPRInCurrentChecklist >= 0 ? currentChecklistData?.PRListMobileExpensify[indexOfPRInCurrentChecklist].isVerified : false;
                 return {
-                    number: prNum,
-                    url: GithubUtils.getPullRequestURLFromNumber(prNum, CONST.MOBILE_EXPENSIFY_URL),
+                    number: entry.prNumber,
+                    url: GithubUtils.getPullRequestURLFromNumber(entry.prNumber, CONST.MOBILE_EXPENSIFY_URL),
                     isVerified,
                 };
             });
